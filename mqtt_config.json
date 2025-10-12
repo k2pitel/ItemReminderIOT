@@ -1,0 +1,23 @@
+{
+  "mqtt": {
+    "broker": {
+      "url": "85e1b192f896482fa682320d8d591396.s1.eu.hivemq.cloud",
+      "port": 8883,
+      "websocket_port": 8884,
+      "tls_enabled": true
+    },
+    "connection": {
+      "mqtt_url": "85e1b192f896482fa682320d8d591396.s1.eu.hivemq.cloud:8883",
+      "websocket_url": "85e1b192f896482fa682320d8d591396.s1.eu.hivemq.cloud:8884/mqtt"
+    },
+    "credentials": {
+      "username": "your_username",
+      "password": "your_password"
+    },
+    "topics": {
+      "reminder": "itemreminder/notification",
+      "status": "itemreminder/status",
+      "command": "itemreminder/command"
+    }
+  }
+}

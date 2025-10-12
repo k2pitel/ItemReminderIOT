@@ -1,0 +1,34 @@
+# Environment files
+.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Arduino
+*.hex
+*.elf
+*.bin
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
