@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.local
+.DS_Store
+*.log
+logs/
+coverage/
+build/
+dist/
+.vscode/
+.idea/
+mosquitto/data/
+mosquitto/log/
