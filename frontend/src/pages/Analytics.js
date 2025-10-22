@@ -133,7 +133,7 @@ const Analytics = () => {
                     Average Weight
                   </Typography>
                   <Typography variant="h4">
-                    {analytics.averageWeight.toFixed(1)}g
+                    {analytics.averageWeight !== null ? analytics.averageWeight.toFixed(1) : 'N/A'}g
                   </Typography>
                 </CardContent>
               </Card>
@@ -145,7 +145,7 @@ const Analytics = () => {
                     Min Weight
                   </Typography>
                   <Typography variant="h4">
-                    {analytics.minWeight.toFixed(1)}g
+                    {analytics.minWeight !== null ? analytics.minWeight.toFixed(1) : 'N/A'}g
                   </Typography>
                 </CardContent>
               </Card>
@@ -157,7 +157,7 @@ const Analytics = () => {
                     Max Weight
                   </Typography>
                   <Typography variant="h4">
-                    {analytics.maxWeight.toFixed(1)}g
+                    {analytics.maxWeight !== null ? analytics.maxWeight.toFixed(1) : 'N/A'}g
                   </Typography>
                 </CardContent>
               </Card>
@@ -178,7 +178,7 @@ const Analytics = () => {
                 <YAxis />
                 <Tooltip
                   labelFormatter={(value) => new Date(value).toLocaleString()}
-                  formatter={(value) => [`${value.toFixed(2)}g`, 'Weight']}
+                  formatter={(value) => [`${value !== null ? value.toFixed(2) : 'N/A'}g`, 'Weight']}
                 />
                 <Legend />
                 <Line

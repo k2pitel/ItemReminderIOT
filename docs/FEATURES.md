@@ -17,6 +17,7 @@
 - **Alert History**: Track all past notifications
 - **Read/Unread**: Mark alerts as read
 
+
 ### 3. Geofencing
 - **Interactive Maps**: Leaflet-based location selection
 - **Custom Zones**: Set radius for each geofence

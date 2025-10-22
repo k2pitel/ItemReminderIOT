@@ -39,7 +39,10 @@ class MqttService {
 
     this.client.on('message', async (topic, message) => {
       try {
-        const data = JSON.parse(message.toString());
+        const messageString = message.toString();
+        logger.info(`Raw MQTT message on ${topic}: "${messageString}"`);
+        
+        const data = JSON.parse(messageString);
         logger.info(`MQTT message received on ${topic}:`, data);
 
         if (topic === 'itemreminder/weight') {
@@ -49,6 +52,7 @@ class MqttService {
         }
       } catch (error) {
         logger.error('Error processing MQTT message:', error);
+        logger.error('Raw message content:', message.toString());
       }
     });
 
