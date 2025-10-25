@@ -201,27 +201,107 @@ REACT_APP_SOCKET_URL=http://localhost:5000
 ### System Overview
 
 ```
-ESP32 Device
-    ↓ (MQTT)
-MQTT Broker (Mosquitto)
-    ↓
-Backend Server (Node.js)
-    ├── MongoDB (Data Storage)
-    ├── Socket.IO (Real-time Updates)
-    └── Notification Services (Blynk/Firebase)
-    ↓
-Frontend (React)
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    IoT Item Reminder System Architecture                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+                    ┌─────────────────┐
+                    │  User Device    │
+                    │  Web Browser    │
+                    │  (React App)    │
+                    └────────┬────────┘
+                             │
+                             │ HTTPS/WSS
+                             │ (Real-time updates)
+                             ▼
+    ┌──────────────┐   ┌────────────────────┐   ┌──────────────────┐
+    │   ESP32      │   │   Backend Server   │   │  Notification    │
+    │   Device     │──▶│   (Node.js)        │──▶│  Services        │
+    │              │   │                    │   │  - Blynk         │
+    │  - Weight    │   │  - REST API        │   │  - Firebase FCM  │
+    │    Sensor    │   │  - MQTT Client     │   │  - Email         │
+    │  - WiFi      │   │  - Socket.IO       │   └──────────────────┘
+    │  - MQTT Pub  │   │  - Auth (JWT)      │
+    └──────┬───────┘   │  - Business Logic  │
+           │           └─────────┬──────────┘
+           │                     │
+           │ MQTT                │ Mongoose ODM
+           │ Protocol            │
+           │                     ▼
+           │           ┌──────────────────┐
+           │           │    MongoDB       │
+           │           │                  │
+           └──────────▶│  - Users         │
+                       │  - Items         │
+         ┌─────────────│  - Readings      │
+         │             │  - Geofences     │
+         │             │  - Alerts        │
+         ▼             └──────────────────┘
+    ┌──────────┐
+    │  MQTT    │
+    │  Broker  │
+    │(Mosquitto)│
+    └──────────┘
+
+Key Components:
+══════════════
+• ESP32: IoT edge device with weight sensor simulation
+• MQTT Broker: Message broker for pub/sub communication  
+• Backend: Node.js server with Express.js REST API
+• MongoDB: NoSQL database for data persistence
+• Frontend: React SPA with Material-UI
+• Notifications: Multi-channel alert system
 ```
 
 ### Data Flow
 
-1. **ESP32** measures weight and publishes to MQTT topic
-2. **Backend** subscribes to MQTT, processes data
-3. **MongoDB** stores readings and item status
-4. **Geofencing Service** checks location-based rules
-5. **Notification Service** sends alerts via Blynk/Firebase
-6. **Socket.IO** broadcasts real-time updates to frontend
-7. **Frontend** displays live data and visualizations
+1. **ESP32** measures weight and publishes to MQTT topic (`itemreminder/weight`)
+2. **MQTT Broker** routes messages to subscribed clients
+3. **Backend** subscribes to MQTT, processes weight data
+4. **MongoDB** stores readings and updates item status
+5. **Geofencing Service** checks location-based rules
+6. **Alert Service** creates alerts when thresholds are crossed
+7. **Notification Service** sends alerts via Blynk/Firebase/Email
+8. **Socket.IO** broadcasts real-time updates to connected frontends
+9. **Frontend** displays live data, charts, and visualizations
+
+### Key Features Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     FRONTEND (React)                             │
+│                                                                  │
+│  Dashboard │ Items │ Analytics │ Geofences │ Alerts │ Settings  │
+│                                                                  │
+│  AuthContext ────────────── SocketContext                        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ REST API + WebSocket
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    BACKEND (Node.js)                             │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Routes: auth │ items │ readings │ geofence │ alerts    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Services:                                                │   │
+│  │  • mqttService - MQTT communication & processing         │   │
+│  │  • alertService - Alert creation & management            │   │
+│  │  • geofenceService - Location-based logic                │   │
+│  │  • notificationService - Multi-channel notifications     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Models: User │ Item │ Reading │ Geofence │ Alert        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ Mongoose
+                         ▼
+                  ┌──────────────┐
+                  │   MongoDB    │
+                  └──────────────┘
+```
 
 ## 📡 API Endpoints
 
