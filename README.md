@@ -305,31 +305,41 @@ Key Components:
 
 ## 📡 API Endpoints
 
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login
+The backend exposes a RESTful API with 20 endpoints across 6 route groups:
 
-### Items
-- `GET /api/items` - Get all items
-- `POST /api/items` - Create item
+### Authentication (2 endpoints)
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login and get JWT token
+
+### Items (5 endpoints)
+- `GET /api/items` - Get all user's items
+- `GET /api/items/:id` - Get specific item
+- `POST /api/items` - Create new item
 - `PUT /api/items/:id` - Update item
 - `DELETE /api/items/:id` - Delete item
 
-### Readings
-- `GET /api/readings/item/:itemId` - Get readings for item
-- `GET /api/readings/analytics/:itemId` - Get analytics
+### Readings (2 endpoints)
+- `GET /api/readings/item/:itemId` - Get readings for item (with pagination)
+- `GET /api/readings/analytics/:itemId` - Get analytics and statistics
 
-### Geofences
-- `GET /api/geofence` - Get geofences
+### Geofences (5 endpoints)
+- `GET /api/geofence` - Get all user's geofences
 - `POST /api/geofence` - Create geofence
 - `PUT /api/geofence/:id` - Update geofence
 - `DELETE /api/geofence/:id` - Delete geofence
-- `POST /api/geofence/check-location` - Check user location
+- `POST /api/geofence/check-location` - Check user location against geofences
 
-### Alerts
-- `GET /api/alerts` - Get alerts
+### Alerts (3 endpoints)
+- `GET /api/alerts` - Get user's alerts
 - `PATCH /api/alerts/:id/read` - Mark alert as read
 - `DELETE /api/alerts/:id` - Delete alert
+
+### Users (3 endpoints)
+- `GET /api/users/me` - Get current user profile
+- `PUT /api/users/me` - Update user profile
+- `PUT /api/users/me/notifications` - Update notification preferences
+
+**Note**: All endpoints except `/api/auth/register` and `/api/auth/login` require JWT authentication via Bearer token in the Authorization header.
 
 ## 🔐 Security Features
 

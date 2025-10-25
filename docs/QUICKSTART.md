@@ -223,29 +223,39 @@ npm start
 
 ## API Endpoints
 
+The backend provides 20 RESTful API endpoints:
+
 ### Authentication
-- `POST /api/auth/register` - Register
-- `POST /api/auth/login` - Login
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login and get JWT token
 
 ### Items
-- `GET /api/items` - List items
-- `POST /api/items` - Create item
+- `GET /api/items` - List all user's items
+- `GET /api/items/:id` - Get specific item details
+- `POST /api/items` - Create new item
 - `PUT /api/items/:id` - Update item
 - `DELETE /api/items/:id` - Delete item
 
-### Analytics
-- `GET /api/readings/item/:itemId` - Get readings
-- `GET /api/readings/analytics/:itemId` - Get analytics
+### Readings
+- `GET /api/readings/item/:itemId` - Get readings with pagination
+- `GET /api/readings/analytics/:itemId` - Get analytics and statistics
 
 ### Geofences
-- `GET /api/geofence` - List geofences
+- `GET /api/geofence` - List all geofences
 - `POST /api/geofence` - Create geofence
-- `POST /api/geofence/check-location` - Check location
+- `PUT /api/geofence/:id` - Update geofence
+- `DELETE /api/geofence/:id` - Delete geofence
+- `POST /api/geofence/check-location` - Check location against geofences
 
 ### Alerts
-- `GET /api/alerts` - List alerts
+- `GET /api/alerts` - List user alerts
 - `PATCH /api/alerts/:id/read` - Mark as read
 - `DELETE /api/alerts/:id` - Delete alert
+
+### Users
+- `GET /api/users/me` - Get user profile
+- `PUT /api/users/me` - Update profile
+- `PUT /api/users/me/notifications` - Update notification settings
 
 ## Configuration
 
