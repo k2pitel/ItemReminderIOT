@@ -45,6 +45,35 @@ const geofenceSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // User tracking fields for GPS-based alerts
+  userCurrentlyInside: {
+    type: Boolean,
+    default: false
+  },
+  userEnteredAt: {
+    type: Date
+  },
+  userExitedAt: {
+    type: Date
+  },
+  lastLocationUpdate: {
+    type: Date,
+    default: Date.now
+  },
+  alertSettings: {
+    notifyOnExit: {
+      type: Boolean,
+      default: true
+    },
+    notifyOnLowItemExit: {
+      type: Boolean,
+      default: true
+    },
+    minimumTimeInside: {
+      type: Number, // minutes
+      default: 30
+    }
+  },
   createdAt: {
     type: Date,
     default: Date.now

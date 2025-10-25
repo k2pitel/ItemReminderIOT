@@ -88,6 +88,86 @@ class GeofenceService {
     }
   }
 
+  async updateUserLocation(userId, userLocation) {
+    try {
+      const geofences = await Geofence.find({ userId, active: true }).populate('itemId');
+      const now = new Date();
+      const alertsTriggered = [];
+
+      for (const geofence of geofences) {
+        const isInside = this.isPointInGeofence(userLocation, geofence);
+        const wasInside = geofence.userCurrentlyInside;
+
+        // Update geofence tracking
+        geofence.lastLocationUpdate = now;
+
+        // User entering geofence
+        if (isInside && !wasInside) {
+          geofence.userCurrentlyInside = true;
+          geofence.userEnteredAt = now;
+          geofence.userExitedAt = null;
+          
+          logger.info(`User ${userId} entered geofence: ${geofence.name}`);
+        }
+        
+        // User leaving geofence - CHECK FOR SMART ALERTS!
+        else if (!isInside && wasInside) {
+          geofence.userCurrentlyInside = false;
+          geofence.userExitedAt = now;
+
+          // 🚨 SMART ALERT: Check if leaving without essential items
+          if (geofence.itemId && geofence.alertSettings?.leaveWithoutItems) {
+            const item = geofence.itemId;
+            
+            // Check if item is low or empty
+            if (item.status === 'LOW' || item.status === 'EMPTY') {
+              const alert = await alertService.createAlert({
+                userId: userId,
+                itemId: item._id,
+                type: 'geofence_exit',
+                severity: item.status === 'EMPTY' ? 'critical' : 'high',
+                message: `⚠️ Don't forget! ${item.name} is ${item.status.toLowerCase()} - you're leaving ${geofence.name}`,
+                data: {
+                  geofenceName: geofence.name,
+                  itemStatus: item.status,
+                  weight: item.currentWeight,
+                  exitTime: now,
+                  location: userLocation
+                }
+              });
+
+              alertsTriggered.push({
+                geofenceName: geofence.name,
+                itemName: item.name,
+                status: item.status,
+                alert: alert
+              });
+            }
+          }
+
+          logger.info(`User ${userId} left geofence: ${geofence.name}`);
+        }
+
+        await geofence.save();
+      }
+
+      return {
+        location: userLocation,
+        timestamp: now,
+        geofenceStatus: geofences.map(g => ({
+          id: g._id,
+          name: g.name,
+          isInside: g.userCurrentlyInside,
+          distance: geolib.getDistance(userLocation, g.location)
+        })),
+        alertsTriggered
+      };
+    } catch (error) {
+      logger.error('Error updating user location:', error);
+      throw error;
+    }
+  }
+
   isPointInGeofence(userLocation, geofence) {
     const distance = geolib.getDistance(
       { latitude: userLocation.latitude, longitude: userLocation.longitude },

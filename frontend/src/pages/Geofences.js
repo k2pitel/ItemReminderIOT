@@ -17,7 +17,10 @@ import {
   IconButton,
   MenuItem,
   Typography,
-  Chip
+  Chip,
+  FormControlLabel,
+  Switch,
+  Divider
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from 'react-leaflet';
@@ -57,7 +60,12 @@ const Geofences = () => {
     longitude: 0,
     radius: 100,
     triggerCondition: 'both',
-    alertWhenLow: true
+    alertWhenLow: true,
+    alertSettings: {
+      leaveWithoutItems: true,
+      emailNotifications: true,
+      pushNotifications: true
+    }
   });
 
   useEffect(() => {
@@ -93,7 +101,12 @@ const Geofences = () => {
         longitude: geofence.location.longitude,
         radius: geofence.radius,
         triggerCondition: geofence.triggerCondition,
-        alertWhenLow: geofence.alertWhenLow
+        alertWhenLow: geofence.alertWhenLow,
+        alertSettings: geofence.alertSettings || {
+          leaveWithoutItems: true,
+          emailNotifications: true,
+          pushNotifications: true
+        }
       });
       setMapPosition({
         lat: geofence.location.latitude,
@@ -108,7 +121,12 @@ const Geofences = () => {
         longitude: 0,
         radius: 100,
         triggerCondition: 'both',
-        alertWhenLow: true
+        alertWhenLow: true,
+        alertSettings: {
+          leaveWithoutItems: true,
+          emailNotifications: true,
+          pushNotifications: true
+        }
       });
       setMapPosition(null);
     }
@@ -122,10 +140,24 @@ const Geofences = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    const { name, value, type, checked } = e.target;
+    
+    // Handle nested alertSettings
+    if (name.startsWith('alertSettings.')) {
+      const settingName = name.split('.')[1];
+      setFormData({
+        ...formData,
+        alertSettings: {
+          ...formData.alertSettings,
+          [settingName]: type === 'checkbox' ? checked : value
+        }
+      });
+    } else {
+      setFormData({
+        ...formData,
+        [name]: type === 'checkbox' ? checked : value
+      });
+    }
   };
 
   useEffect(() => {
@@ -358,6 +390,49 @@ const Geofences = () => {
             <MenuItem value={true}>Yes</MenuItem>
             <MenuItem value={false}>No</MenuItem>
           </TextField>
+
+          <Divider sx={{ my: 3 }} />
+          
+          <Typography variant="h6" gutterBottom>
+            🚨 Smart Alert Settings
+          </Typography>
+          
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.alertSettings?.leaveWithoutItems || false}
+                onChange={handleChange}
+                name="alertSettings.leaveWithoutItems"
+              />
+            }
+            label="Alert when leaving without essential items"
+          />
+          
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.alertSettings?.emailNotifications || false}
+                onChange={handleChange}
+                name="alertSettings.emailNotifications"
+              />
+            }
+            label="Email notifications"
+          />
+          
+          <FormControlLabel
+            control={
+              <Switch
+                checked={formData.alertSettings?.pushNotifications || false}
+                onChange={handleChange}
+                name="alertSettings.pushNotifications"
+              />
+            }
+            label="Browser notifications"
+          />
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+            💡 Smart alerts track your GPS location and warn you if you leave this area while monitored items are low or empty
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>
