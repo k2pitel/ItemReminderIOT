@@ -1,4 +1,77 @@
-# ESP32 Item Reminder Configuration
+# ESP32 Item Reminder - Firmware Configuration Guide
+
+## System Architecture
+
+```
+┌───────────────────────────────────────────────────────────────────────┐
+│                    ESP32 Device Architecture                           │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                         ESP32 Firmware                                │
+│                                                                       │
+│  ┌────────────────────────────────────────────────────────────┐     │
+│  │                    Main Loop                                │     │
+│  │  • Read weight sensor (every 5 seconds)                    │     │
+│  │  • Publish to MQTT                                          │     │
+│  │  • Handle incoming commands                                │     │
+│  └────────────────────────────────────────────────────────────┘     │
+│                                                                       │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐      │
+│  │    WiFi      │  │ MQTT Client  │  │  Sensor Simulator    │      │
+│  │              │  │              │  │  (or HX711 driver)   │      │
+│  │  • Connect   │  │  • Publish   │  │                      │      │
+│  │  • Reconnect │  │  • Subscribe │  │  • Read ADC          │      │
+│  │  • Monitor   │  │  • Callback  │  │  • Calculate weight  │      │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘      │
+│         │                 │                      │                  │
+│         └─────────────────┼──────────────────────┘                  │
+│                           │                                         │
+└───────────────────────────┼─────────────────────────────────────────┘
+                            │
+                            ▼
+                  ┌──────────────────┐
+                  │  MQTT Broker     │
+                  │  (Mosquitto)     │
+                  │                  │
+                  │  Topics:         │
+                  │  • /weight       │
+                  │  • /status       │
+                  │  • /command      │
+                  └──────────────────┘
+```
+
+## Data Flow Diagram
+
+```
+┌────────────┐           ┌──────────────┐          ┌──────────────┐
+│   Sensor   │  Analog   │     ADC      │  Digital │   ESP32      │
+│  (Weight)  │──────────▶│   (GPIO 34)  │─────────▶│   Process    │
+└────────────┘  Signal   └──────────────┘   Value  └──────┬───────┘
+                                                           │
+                                                           │ Format
+                                                           │ JSON
+                                                           ▼
+                                                  ┌─────────────────┐
+                                                  │  JSON Payload   │
+                                                  │  {              │
+                                                  │   device_id,    │
+                                                  │   weight,       │
+                                                  │   threshold,    │
+                                                  │   status,       │
+                                                  │   timestamp     │
+                                                  │  }              │
+                                                  └────────┬────────┘
+                                                           │
+                                                           │ MQTT Publish
+                                                           ▼
+                                                  ┌─────────────────┐
+                                                  │  MQTT Broker    │
+                                                  │  Topic:         │
+                                                  │  itemreminder/  │
+                                                  │  weight         │
+                                                  └─────────────────┘
+```
 
 ## Required Libraries
 
@@ -31,6 +104,76 @@ Install the following libraries in your Arduino IDE:
    - Click Upload
 
 ## Hardware Connections
+
+### Simulation Mode (Current Implementation)
+
+```
+┌─────────────────────────────────────┐
+│          ESP32 DevKit               │
+│                                     │
+│  ┌──────────────────────────────┐   │
+│  │  ADC GPIO 34                 │   │  Uses random value
+│  │  (Sensor simulation)         │   │  generation for
+│  └──────────────────────────────┘   │  demonstration
+│                                     │
+│  ┌──────────────────────────────┐   │
+│  │  WiFi Module (built-in)      │   │
+│  │  • 2.4GHz                    │   │
+│  │  • WPA/WPA2                  │   │
+│  └──────────────────────────────┘   │
+│                                     │
+│  ┌──────────────────────────────┐   │
+│  │  USB Port                    │   │
+│  │  • Power (5V)                │   │
+│  │  • Serial Monitor            │   │
+│  └──────────────────────────────┘   │
+└─────────────────────────────────────┘
+```
+
+### Production Mode (With Real HX711 Load Cell)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Hardware Setup                             │
+└─────────────────────────────────────────────────────────────┘
+
+ESP32 DevKit                          HX711 Module
+┌──────────────┐                      ┌──────────────┐
+│              │                      │              │
+│   3.3V   ────┼──────────────────────┼──── VCC      │
+│              │                      │              │
+│   GND    ────┼──────────────────────┼──── GND      │
+│              │                      │              │
+│   GPIO 33 ───┼──────────────────────┼──── DT       │
+│   (Data)     │                      │   (Data)     │
+│              │                      │              │
+│   GPIO 32 ───┼──────────────────────┼──── SCK      │
+│   (Clock)    │                      │   (Clock)    │
+│              │                      │              │
+└──────────────┘                      └──────┬───────┘
+                                             │
+                                             │
+                                      ┌──────▼───────┐
+                                      │  Load Cell   │
+                                      │              │
+                                      │  E+ E- A+ A- │
+                                      │  │  │  │  │  │
+                                      └──┼──┼──┼──┼──┘
+                                         Red Blk Wht Grn
+
+Wiring Details:
+═══════════════
+ESP32          HX711          Load Cell
+─────          ─────          ─────────
+3.3V    ────▶  VCC
+GND     ────▶  GND
+GPIO 33 ────▶  DT (Data)
+GPIO 32 ────▶  SCK (Clock)
+               E+      ────▶  Red (Excitation+)
+               E-      ────▶  Black (Excitation-)
+               A+      ────▶  White (Signal+)
+               A-      ────▶  Green (Signal-)
+```
 
 For actual weight sensor implementation:
 

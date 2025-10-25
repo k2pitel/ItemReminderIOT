@@ -12,6 +12,168 @@ The IoT Item Reminder system is a distributed application consisting of:
 4. **Database**: MongoDB for persistent storage
 5. **Frontend**: React web application for user interaction
 
+## C4 Model - Container Level (C2)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              IoT Item Reminder System                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────┐                                    ┌──────────────────────┐
+│   ESP32      │                                    │     Web Browser      │
+│   Device     │                                    │   [Container:JS]     │
+│              │                                    │                      │
+│ - WiFi       │                                    │  React Frontend      │
+│ - MQTT Pub   │                                    │  - Material-UI       │
+│ - Weight     │                                    │  - Socket.IO Client  │
+│   Simulation │                                    │  - Leaflet Maps      │
+└──────┬───────┘                                    │  - Recharts          │
+       │                                            └──────────┬───────────┘
+       │ MQTT Protocol                                         │
+       │ (Port 1883)                                           │ HTTPS/WSS
+       │                                                        │ (Port 3000)
+       ▼                                                        ▼
+┌──────────────────┐                              ┌─────────────────────────┐
+│  MQTT Broker     │                              │   Nginx Reverse Proxy   │
+│  [Container]     │                              │   [Container]           │
+│                  │                              │   (Production Only)     │
+│  Eclipse         │                              └──────────┬──────────────┘
+│  Mosquitto       │                                         │
+│  - Pub/Sub       │                                         │ HTTP/WS
+│  - Port 1883     │                                         │ (Port 5000)
+└──────┬───────────┘                                         ▼
+       │                                          ┌────────────────────────────┐
+       │ MQTT Sub                                 │   Backend API Server       │
+       │                                          │   [Container: Node.js]     │
+       └──────────────────────────────────────────▶                            │
+                                                  │  Express.js Application    │
+                                                  │                            │
+                                                  │  ┌─────────────────────┐   │
+                                                  │  │  REST API Routes    │   │
+                                                  │  │  - auth             │   │
+                                                  │  │  - items            │   │
+                                                  │  │  - readings         │   │
+                                                  │  │  - geofence         │   │
+                                                  │  │  - alerts           │   │
+                                                  │  └─────────────────────┘   │
+                                                  │                            │
+                                                  │  ┌─────────────────────┐   │
+                                                  │  │  Services           │   │
+                                                  │  │  - mqttService      │   │
+                                                  │  │  - alertService     │   │
+                                                  │  │  - geofenceService  │   │
+                                                  │  │  - notificationSvc  │   │
+                                                  │  └─────────────────────┘   │
+                                                  │                            │
+                                                  │  ┌─────────────────────┐   │
+                                                  │  │  Socket.IO Server   │   │
+                                                  │  │  - Real-time push   │   │
+                                                  │  └─────────────────────┘   │
+                                                  └──────┬───────────┬─────────┘
+                                                         │           │
+                                                         │           │
+                                       ┌─────────────────┘           └────────────────┐
+                                       │                                              │
+                                       ▼                                              ▼
+                             ┌──────────────────┐                        ┌──────────────────────┐
+                             │   MongoDB        │                        │ External Services    │
+                             │   [Container]    │                        │ [External Systems]   │
+                             │                  │                        │                      │
+                             │  - Users         │                        │  - Blynk API         │
+                             │  - Items         │                        │  - Firebase FCM      │
+                             │  - Readings      │                        │  - Email SMTP        │
+                             │  - Geofences     │                        │                      │
+                             │  - Alerts        │                        └──────────────────────┘
+                             │                  │
+                             │  Port: 27017     │
+                             └──────────────────┘
+
+Key:
+━━━ Synchronous HTTP/HTTPS connection
+─── Asynchronous messaging
+◀── Read/Write data
+```
+
+## Software Block Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            PRESENTATION LAYER                                    │
+│                                                                                  │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
+│  │ Dashboard  │  │   Items    │  │ Analytics  │  │ Geofences  │  │  Alerts  │  │
+│  │   Page     │  │   Page     │  │   Page     │  │    Page    │  │   Page   │  │
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘  └──────────┘  │
+│                                                                                  │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                    React Context (Auth, Socket)                          │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            APPLICATION LAYER                                     │
+│                                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │   Auth   │  │  Items   │  │ Readings │  │ Geofence │  │  Alerts  │         │
+│  │  Routes  │  │  Routes  │  │  Routes  │  │  Routes  │  │  Routes  │         │
+│  └─────┬────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘  └─────┬────┘         │
+│        └──────────────┼─────────────┼─────────────┼─────────────┘              │
+│                       ▼             ▼             ▼                             │
+│  ┌────────────────────────────────────────────────────────────────────┐         │
+│  │                      Business Logic Services                       │         │
+│  │                                                                     │         │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐     │         │
+│  │  │ MQTT Service │  │Alert Service │  │ Geofence Service     │     │         │
+│  │  │              │  │              │  │                      │     │         │
+│  │  │ - Subscribe  │  │ - Create     │  │ - Check Location     │     │         │
+│  │  │ - Process    │  │ - Trigger    │  │ - Calculate Distance │     │         │
+│  │  │ - Publish    │  │ - Notify     │  │ - Validate Zones     │     │         │
+│  │  └──────────────┘  └──────────────┘  └──────────────────────┘     │         │
+│  │                                                                     │         │
+│  │  ┌──────────────────────────────────────────────────────────┐     │         │
+│  │  │           Notification Service                           │     │         │
+│  │  │  - Blynk Push    - Firebase FCM    - Email SMTP          │     │         │
+│  │  └──────────────────────────────────────────────────────────┘     │         │
+│  └────────────────────────────────────────────────────────────────────┘         │
+└──────────────────────────────────────┬──────────────────────────────────────────┘
+                                       │
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              DATA LAYER                                          │
+│                                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐         │
+│  │   User   │  │   Item   │  │ Reading  │  │ Geofence │  │  Alert   │         │
+│  │  Model   │  │  Model   │  │  Model   │  │  Model   │  │  Model   │         │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘         │
+│       └─────────────┴──────────────┴─────────────┴──────────────┘              │
+│                                     │                                           │
+│                           ┌─────────▼─────────┐                                 │
+│                           │   Mongoose ODM    │                                 │
+│                           └─────────┬─────────┘                                 │
+│                                     │                                           │
+│                           ┌─────────▼─────────┐                                 │
+│                           │  MongoDB Database │                                 │
+│                           │  - Collections    │                                 │
+│                           │  - Indexes        │                                 │
+│                           │  - TTL Cleanup    │                                 │
+│                           └───────────────────┘                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                            EDGE LAYER                                            │
+│                                                                                  │
+│  ┌───────────────────────────────────────────────────────────────────────────┐  │
+│  │                         ESP32 Firmware                                    │  │
+│  │                                                                           │  │
+│  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                   │  │
+│  │  │    WiFi      │  │    MQTT      │  │   Sensor     │                   │  │
+│  │  │  Connection  │  │   Client     │  │  Simulator   │                   │  │
+│  │  └──────────────┘  └──────────────┘  └──────────────┘                   │  │
+│  └───────────────────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
 ### Technology Stack
 
 #### ESP32 Firmware
@@ -46,6 +208,246 @@ The IoT Item Reminder system is a distributed application consisting of:
 - **MQTT Broker**: Eclipse Mosquitto
 - **Containerization**: Docker & Docker Compose
 - **Web Server**: Nginx (for production frontend)
+
+## UML Class Diagram - Core Data Models
+
+```
+┌─────────────────────────────────┐
+│           User                  │
+├─────────────────────────────────┤
+│ - _id: ObjectId                 │
+│ - username: String [unique]     │
+│ - email: String [unique]        │
+│ - password: String [hashed]     │
+│ - firstName: String             │
+│ - lastName: String              │
+│ - role: String [user|admin]     │
+│ - notifications: Object         │
+│   • email: Boolean              │
+│   • push: Boolean               │
+│   • sms: Boolean                │
+│ - createdAt: Date               │
+│ - updatedAt: Date               │
+├─────────────────────────────────┤
+│ + comparePassword()             │
+│ + hashPassword()                │
+└─────────────────┬───────────────┘
+                  │
+                  │ 1
+                  │
+                  │ owns *
+                  │
+      ┌───────────┴────────────────────────────────┐
+      │                                            │
+      ▼                                            ▼
+┌─────────────────────────────────┐    ┌─────────────────────────────────┐
+│           Item                  │    │         Geofence                │
+├─────────────────────────────────┤    ├─────────────────────────────────┤
+│ - _id: ObjectId                 │    │ - _id: ObjectId                 │
+│ - userId: ObjectId [ref:User]   │    │ - userId: ObjectId [ref:User]   │
+│ - deviceId: String [unique]     │◀───┤ - itemId: ObjectId [ref:Item]   │
+│ - name: String                  │ *  │ - name: String                  │
+│ - description: String           │    │ - location: Object              │
+│ - category: String              │    │   • latitude: Number            │
+│ - thresholdWeight: Number       │    │   • longitude: Number           │
+│ - currentWeight: Number         │    │ - radius: Number [meters]       │
+│ - unit: String                  │    │ - triggerCondition: String      │
+│ - status: String                │    │   [enter|exit|both]             │
+│ - lastReading: Date             │    │ - alertWhenLow: Boolean         │
+│ - isActive: Boolean             │    │ - isActive: Boolean             │
+│ - createdAt: Date               │    │ - createdAt: Date               │
+│ - updatedAt: Date               │    │ - updatedAt: Date               │
+└─────────────────┬───────────────┘    └─────────────────────────────────┘
+                  │
+                  │ 1
+                  │
+                  │ has *
+                  │
+      ┌───────────┴───────────────┐
+      │                           │
+      ▼                           ▼
+┌─────────────────────────────────┐    ┌─────────────────────────────────┐
+│         Reading                 │    │          Alert                  │
+├─────────────────────────────────┤    ├─────────────────────────────────┤
+│ - _id: ObjectId                 │    │ - _id: ObjectId                 │
+│ - itemId: ObjectId [ref:Item]   │    │ - userId: ObjectId [ref:User]   │
+│ - deviceId: String              │    │ - itemId: ObjectId [ref:Item]   │
+│ - weight: Number                │    │ - type: String                  │
+│ - threshold: Number             │    │   [low_weight|offline|geofence] │
+│ - status: String [OK|LOW]       │    │ - severity: String              │
+│ - wifiRssi: Number              │    │   [info|warning|critical]       │
+│ - timestamp: Date [indexed]     │    │ - message: String               │
+│ - createdAt: Date [TTL: 90d]    │    │ - data: Object                  │
+├─────────────────────────────────┤    │ - read: Boolean                 │
+│ + getByItem(itemId, limit)      │    │ - notificationSent: Boolean     │
+│ + getAnalytics(itemId, period)  │    │ - createdAt: Date [TTL: 30d]    │
+└─────────────────────────────────┘    ├─────────────────────────────────┤
+                                       │ + createAlert(data)             │
+                                       │ + markAsRead(id)                │
+                                       └─────────────────────────────────┘
+
+Relationships:
+═══════════════
+• User 1──* Item (A user owns multiple items)
+• User 1──* Geofence (A user creates multiple geofences)
+• User 1──* Alert (A user receives multiple alerts)
+• Item 1──* Reading (An item has multiple readings over time)
+• Item 1──* Alert (An item generates multiple alerts)
+• Item 1──* Geofence (An item can be linked to multiple geofences)
+
+Indexes:
+════════
+• User: username (unique), email (unique)
+• Item: deviceId (unique), userId
+• Reading: itemId, timestamp, createdAt (TTL: 90 days)
+• Alert: userId, itemId, createdAt (TTL: 30 days)
+• Geofence: userId, itemId
+```
+
+## Sequence Diagrams
+
+### 1. Weight Measurement and Alert Flow
+
+```
+ESP32        MQTT Broker    Backend         MongoDB      Notification    Frontend
+  │               │            │               │              │             │
+  │───Measure─────│            │               │              │             │
+  │   Weight      │            │               │              │             │
+  │               │            │               │              │             │
+  │─Publish───────▶            │               │              │             │
+  │  weight       │            │               │              │             │
+  │               │            │               │              │             │
+  │               │─Subscribe──▶               │              │             │
+  │               │  receive   │               │              │             │
+  │               │            │               │              │             │
+  │               │            │──Find Item────▶              │             │
+  │               │            │  by deviceId  │              │             │
+  │               │            │               │              │             │
+  │               │            │◀─Return Item──│              │             │
+  │               │            │               │              │             │
+  │               │            │──Update Item──▶              │             │
+  │               │            │  weight/status│              │             │
+  │               │            │               │              │             │
+  │               │            │──Save Reading─▶              │             │
+  │               │            │               │              │             │
+  │               │            │──Check if─────│              │             │
+  │               │            │  LOW weight   │              │             │
+  │               │            │               │              │             │
+  │               │            │──Create Alert─▶              │             │
+  │               │            │  (if low)     │              │             │
+  │               │            │               │              │             │
+  │               │            │──Check────────│              │             │
+  │               │            │  Geofences    │              │             │
+  │               │            │               │              │             │
+  │               │            │───────────────┼Send──────────▶             │
+  │               │            │               │Notification  │             │
+  │               │            │               │(Blynk/FCM)   │             │
+  │               │            │               │              │             │
+  │               │            │──Emit Socket.IO event────────┼─────────────▶
+  │               │            │  (weight_update)             │   Update UI │
+  │               │            │                              │             │
+```
+
+### 2. User Authentication Flow
+
+```
+Frontend      Backend        MongoDB          JWT
+   │             │              │              │
+   │─Register────▶              │              │
+   │  POST /auth/register       │              │
+   │             │              │              │
+   │             │──Hash────────│              │
+   │             │  Password    │              │
+   │             │  (bcrypt)    │              │
+   │             │              │              │
+   │             │──Save User───▶              │
+   │             │              │              │
+   │             │◀─User created─              │
+   │             │              │              │
+   │             │──Generate────┼──────────────▶
+   │             │  JWT Token   │              │
+   │             │              │              │
+   │◀─Return─────│              │              │
+   │  Token +    │              │              │
+   │  User Info  │              │              │
+   │             │              │              │
+   │─Login───────▶              │              │
+   │  POST /auth/login          │              │
+   │             │              │              │
+   │             │──Find User───▶              │
+   │             │              │              │
+   │             │◀─User Data───│              │
+   │             │              │              │
+   │             │──Compare─────│              │
+   │             │  Password    │              │
+   │             │              │              │
+   │             │──Generate────┼──────────────▶
+   │             │  JWT Token   │              │
+   │             │              │              │
+   │◀─Return─────│              │              │
+   │  Token +    │              │              │
+   │  User Info  │              │              │
+   │             │              │              │
+   │─API Request─▶              │              │
+   │  + Bearer   │              │              │
+   │  Token      │              │              │
+   │             │              │              │
+   │             │──Verify──────┼──────────────▶
+   │             │  Token       │              │
+   │             │              │              │
+   │             │◀─Valid───────┼──────────────│
+   │             │              │              │
+   │             │──Process─────▶              │
+   │             │  Request     │              │
+   │             │              │              │
+   │◀─Response───│              │              │
+   │             │              │              │
+```
+
+### 3. Geofence Check Flow
+
+```
+Frontend      Backend      MongoDB      Geofence Service    Notification
+   │             │            │                │                 │
+   │─Check───────▶            │                │                 │
+   │  Location   │            │                │                 │
+   │  POST /geofence/check-location            │                 │
+   │             │            │                │                 │
+   │             │──Get User──▶                │                 │
+   │             │  Geofences │                │                 │
+   │             │            │                │                 │
+   │             │◀─Return────│                │                 │
+   │             │  Geofences │                │                 │
+   │             │            │                │                 │
+   │             │──Calculate─┼────────────────▶                 │
+   │             │  Distance  │   (geolib)     │                 │
+   │             │  to each   │                │                 │
+   │             │  geofence  │                │                 │
+   │             │            │                │                 │
+   │             │◀─Distances─┼────────────────│                 │
+   │             │            │                │                 │
+   │             │──Check if──│                │                 │
+   │             │  inside    │                │                 │
+   │             │  radius    │                │                 │
+   │             │            │                │                 │
+   │             │──Get Item──▶                │                 │
+   │             │  Status    │                │                 │
+   │             │            │                │                 │
+   │             │──If inside │                │                 │
+   │             │  & item LOW│                │                 │
+   │             │  & alertOn │                │                 │
+   │             │            │                │                 │
+   │             │──Create────▶                │                 │
+   │             │  Alert     │                │                 │
+   │             │            │                │                 │
+   │             │────────────┼────────────────┼─Send────────────▶
+   │             │            │                │ Notification    │
+   │             │            │                │                 │
+   │◀─Return─────│            │                │                 │
+   │  Nearby     │            │                │                 │
+   │  Geofences  │            │                │                 │
+   │             │            │                │                 │
+```
 
 ## Component Details
 

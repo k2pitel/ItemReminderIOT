@@ -201,55 +201,145 @@ REACT_APP_SOCKET_URL=http://localhost:5000
 ### System Overview
 
 ```
-ESP32 Device
-    ↓ (MQTT)
-MQTT Broker (Mosquitto)
-    ↓
-Backend Server (Node.js)
-    ├── MongoDB (Data Storage)
-    ├── Socket.IO (Real-time Updates)
-    └── Notification Services (Blynk/Firebase)
-    ↓
-Frontend (React)
+┌──────────────────────────────────────────────────────────────────────────┐
+│                    IoT Item Reminder System Architecture                 │
+└──────────────────────────────────────────────────────────────────────────┘
+
+                    ┌─────────────────┐
+                    │  User Device    │
+                    │  Web Browser    │
+                    │  (React App)    │
+                    └────────┬────────┘
+                             │
+                             │ HTTPS/WSS
+                             │ (Real-time updates)
+                             ▼
+    ┌──────────────┐   ┌────────────────────┐   ┌──────────────────┐
+    │   ESP32      │   │   Backend Server   │   │  Notification    │
+    │   Device     │──▶│   (Node.js)        │──▶│  Services        │
+    │              │   │                    │   │  - Blynk         │
+    │  - Weight    │   │  - REST API        │   │  - Firebase FCM  │
+    │    Sensor    │   │  - MQTT Client     │   │  - Email         │
+    │  - WiFi      │   │  - Socket.IO       │   └──────────────────┘
+    │  - MQTT Pub  │   │  - Auth (JWT)      │
+    └──────┬───────┘   │  - Business Logic  │
+           │           └─────────┬──────────┘
+           │                     │
+           │ MQTT                │ Mongoose ODM
+           │ Protocol            │
+           │                     ▼
+           │           ┌──────────────────┐
+           │           │    MongoDB       │
+           │           │                  │
+           └──────────▶│  - Users         │
+                       │  - Items         │
+         ┌─────────────│  - Readings      │
+         │             │  - Geofences     │
+         │             │  - Alerts        │
+         ▼             └──────────────────┘
+    ┌──────────┐
+    │  MQTT    │
+    │  Broker  │
+    │(Mosquitto)│
+    └──────────┘
+
+Key Components:
+══════════════
+• ESP32: IoT edge device with weight sensor simulation
+• MQTT Broker: Message broker for pub/sub communication  
+• Backend: Node.js server with Express.js REST API
+• MongoDB: NoSQL database for data persistence
+• Frontend: React SPA with Material-UI
+• Notifications: Multi-channel alert system
 ```
 
 ### Data Flow
 
-1. **ESP32** measures weight and publishes to MQTT topic
-2. **Backend** subscribes to MQTT, processes data
-3. **MongoDB** stores readings and item status
-4. **Geofencing Service** checks location-based rules
-5. **Notification Service** sends alerts via Blynk/Firebase
-6. **Socket.IO** broadcasts real-time updates to frontend
-7. **Frontend** displays live data and visualizations
+1. **ESP32** measures weight and publishes to MQTT topic (`itemreminder/weight`)
+2. **MQTT Broker** routes messages to subscribed clients
+3. **Backend** subscribes to MQTT, processes weight data
+4. **MongoDB** stores readings and updates item status
+5. **Geofencing Service** checks location-based rules
+6. **Alert Service** creates alerts when thresholds are crossed
+7. **Notification Service** sends alerts via Blynk/Firebase/Email
+8. **Socket.IO** broadcasts real-time updates to connected frontends
+9. **Frontend** displays live data, charts, and visualizations
+
+### Key Features Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     FRONTEND (React)                             │
+│                                                                  │
+│  Dashboard │ Items │ Analytics │ Geofences │ Alerts │ Settings  │
+│                                                                  │
+│  AuthContext ────────────── SocketContext                        │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ REST API + WebSocket
+                         ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    BACKEND (Node.js)                             │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Routes: auth │ items │ readings │ geofence │ alerts    │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Services:                                                │   │
+│  │  • mqttService - MQTT communication & processing         │   │
+│  │  • alertService - Alert creation & management            │   │
+│  │  • geofenceService - Location-based logic                │   │
+│  │  • notificationService - Multi-channel notifications     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  Models: User │ Item │ Reading │ Geofence │ Alert        │   │
+│  └──────────────────────────────────────────────────────────┘   │
+└────────────────────────┬────────────────────────────────────────┘
+                         │ Mongoose
+                         ▼
+                  ┌──────────────┐
+                  │   MongoDB    │
+                  └──────────────┘
+```
 
 ## 📡 API Endpoints
 
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login
+The backend exposes a RESTful API with 20 endpoints across 6 route groups:
 
-### Items
-- `GET /api/items` - Get all items
-- `POST /api/items` - Create item
+### Authentication (2 endpoints)
+- `POST /api/auth/register` - Register new user
+- `POST /api/auth/login` - Login and get JWT token
+
+### Items (5 endpoints)
+- `GET /api/items` - Get all user's items
+- `GET /api/items/:id` - Get specific item
+- `POST /api/items` - Create new item
 - `PUT /api/items/:id` - Update item
 - `DELETE /api/items/:id` - Delete item
 
-### Readings
-- `GET /api/readings/item/:itemId` - Get readings for item
-- `GET /api/readings/analytics/:itemId` - Get analytics
+### Readings (2 endpoints)
+- `GET /api/readings/item/:itemId` - Get readings for item (with pagination)
+- `GET /api/readings/analytics/:itemId` - Get analytics and statistics
 
-### Geofences
-- `GET /api/geofence` - Get geofences
+### Geofences (5 endpoints)
+- `GET /api/geofence` - Get all user's geofences
 - `POST /api/geofence` - Create geofence
 - `PUT /api/geofence/:id` - Update geofence
 - `DELETE /api/geofence/:id` - Delete geofence
-- `POST /api/geofence/check-location` - Check user location
+- `POST /api/geofence/check-location` - Check user location against geofences
 
-### Alerts
-- `GET /api/alerts` - Get alerts
+### Alerts (3 endpoints)
+- `GET /api/alerts` - Get user's alerts
 - `PATCH /api/alerts/:id/read` - Mark alert as read
 - `DELETE /api/alerts/:id` - Delete alert
+
+### Users (3 endpoints)
+- `GET /api/users/me` - Get current user profile
+- `PUT /api/users/me` - Update user profile
+- `PUT /api/users/me/notifications` - Update notification preferences
+
+**Note**: All endpoints except `/api/auth/register` and `/api/auth/login` require JWT authentication via Bearer token in the Authorization header.
 
 ## 🔐 Security Features
 
@@ -287,6 +377,31 @@ Frontend (React)
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📚 Documentation
+
+Comprehensive documentation is available:
+
+- **[README.md](README.md)** - Main project overview and quick start
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture with detailed diagrams
+- **[FEATURES.md](docs/FEATURES.md)** - Complete feature list and technology stack
+- **[QUICKSTART.md](docs/QUICKSTART.md)** - 5-minute getting started guide
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[DIAGRAMS.md](docs/DIAGRAMS.md)** - Index of all diagrams in the project
+- **[SUMMARY.md](SUMMARY.md)** - Implementation summary and project metrics
+- **[esp32/README.md](esp32/README.md)** - ESP32 hardware setup and firmware guide
+
+### Diagram Resources
+
+The project includes comprehensive visual diagrams:
+- **C4 Container-level (C2) diagrams** - System architecture
+- **UML Class diagrams** - Data models and relationships
+- **Sequence diagrams** - Data flows and interactions
+- **Block diagrams** - Component organization
+- **Hardware wiring diagrams** - ESP32 setup
+- **Deployment diagrams** - Infrastructure and scaling
+
+See [DIAGRAMS.md](docs/DIAGRAMS.md) for a complete index of all diagrams.
 
 ## 📄 License
 
