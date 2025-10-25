@@ -50,8 +50,63 @@ app.get('/health', (req, res) => {
 });
 
 // Socket.io connection handling
+const geofenceService = require('./services/geofenceService');
+
 io.on('connection', (socket) => {
   logger.info('Client connected:', socket.id);
+  
+  // Handle user authentication for location tracking
+  socket.on('authenticate', (data) => {
+    socket.userId = data.userId;
+    socket.join(`user-${data.userId}`);
+    logger.info(`User ${data.userId} authenticated on socket ${socket.id}`);
+  });
+
+  // Handle real-time location updates
+  socket.on('location-update', async (data) => {
+    try {
+      if (!socket.userId) {
+        socket.emit('error', { message: 'Not authenticated' });
+        return;
+      }
+
+      const { latitude, longitude, accuracy } = data;
+      
+      if (!latitude || !longitude) {
+        socket.emit('error', { message: 'Invalid location data' });
+        return;
+      }
+
+      // Process location update through geofence service
+      const result = await geofenceService.updateUserLocation(
+        socket.userId,
+        { latitude, longitude, accuracy, timestamp: new Date() }
+      );
+
+      // Send back geofence status
+      socket.emit('geofence-update', result);
+
+      // If alerts were triggered, broadcast them
+      if (result.alertsTriggered && result.alertsTriggered.length > 0) {
+        for (const alertInfo of result.alertsTriggered) {
+          // Emit to user's room for real-time notification
+          io.to(`user-${socket.userId}`).emit('geofence-alert', {
+            type: 'leave-without-items',
+            message: alertInfo.alert.message,
+            geofenceName: alertInfo.geofenceName,
+            itemName: alertInfo.itemName,
+            status: alertInfo.status,
+            alert: alertInfo.alert
+          });
+        }
+      }
+
+      logger.info(`Location updated for user ${socket.userId}: ${latitude}, ${longitude}`);
+    } catch (error) {
+      logger.error('Error processing location update:', error);
+      socket.emit('error', { message: 'Failed to process location update' });
+    }
+  });
   
   socket.on('disconnect', () => {
     logger.info('Client disconnected:', socket.id);

@@ -9,6 +9,7 @@ import {
   LinearProgress
 } from '@mui/material';
 import Layout from '../components/Layout';
+import LocationTracker from '../components/LocationTracker';
 import api from '../services/api';
 
 const Dashboard = () => {
@@ -65,17 +66,25 @@ const Dashboard = () => {
         Dashboard
       </Typography>
 
-      {items.length === 0 ? (
-        <Card>
-          <CardContent>
-            <Typography variant="h6" align="center" color="text.secondary">
-              No items yet. Add your first item to get started!
-            </Typography>
-          </CardContent>
-        </Card>
-      ) : (
-        <Grid container spacing={3}>
-          {items.map((item) => (
+      <Grid container spacing={3}>
+        {/* GPS Location Tracker */}
+        <Grid item xs={12} md={4}>
+          <LocationTracker />
+        </Grid>
+
+        {/* Item Status Cards */}
+        {items.length === 0 ? (
+          <Grid item xs={12}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" align="center" color="text.secondary">
+                  No items yet. Add your first item to get started!
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ) : (
+          items.map((item) => (
             <Grid item xs={12} sm={6} md={4} key={item._id}>
               <Card>
                 <CardContent>
@@ -120,9 +129,9 @@ const Dashboard = () => {
                 </CardContent>
               </Card>
             </Grid>
-          ))}
-        </Grid>
-      )}
+          ))
+        )}
+      </Grid>
     </Layout>
   );
 };
