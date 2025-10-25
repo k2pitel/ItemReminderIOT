@@ -9,6 +9,29 @@ An end-to-end IoT system for tracking items (medications, groceries, supplies) w
 - **Analytics**: View trends and consumption patterns
 - **Multi-user**: Secure accounts for multiple users
 
+## System Quick View
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Quick Start Architecture                          │
+└─────────────────────────────────────────────────────────────────────┘
+
+   ESP32 Device          Backend Services         User Interface
+   ┌──────────┐         ┌──────────────┐         ┌──────────┐
+   │  Weight  │         │   MongoDB    │         │   Web    │
+   │  Sensor  │───MQTT─▶│   Mosquitto  │◀─HTTP──▶│ Browser  │
+   │          │         │   Node.js    │         │ (React)  │
+   └──────────┘         │   Express    │         └──────────┘
+                        └──────────────┘
+                             │
+                        Socket.IO
+                        (Real-time)
+                             │
+                             ▼
+                        Notifications
+                        (Blynk/FCM)
+```
+
 ## Getting Started in 5 Minutes
 
 ### Option 1: Docker (Recommended)
@@ -54,6 +77,29 @@ npm start
 - Start Mosquitto: `mosquitto -c mosquitto/config/mosquitto.conf`
 
 ## First Steps
+
+### User Journey Map
+
+```
+1. Register Account          2. Add Item              3. Configure ESP32
+   │                            │                        │
+   ▼                            ▼                        ▼
+┌────────────┐            ┌────────────┐          ┌────────────┐
+│ Create     │            │ Set Device │          │ Update     │
+│ Username & │───────────▶│ ID, Name,  │─────────▶│ WiFi &     │
+│ Password   │            │ Threshold  │          │ MQTT Config│
+└────────────┘            └────────────┘          └────────────┘
+                                                         │
+                                                         ▼
+4. Set Up Geofence       5. Monitor                ┌────────────┐
+   │                        │                      │ Upload to  │
+   ▼                        ▼                      │ ESP32      │
+┌────────────┐          ┌────────────┐            └────────────┘
+│ Click Map  │          │ Dashboard: │
+│ Set Radius │◀─────────│ Real-time  │
+│ & Triggers │          │ Updates    │
+└────────────┘          └────────────┘
+```
 
 1. **Register Account**
    - Go to http://localhost:3000
