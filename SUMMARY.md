@@ -20,7 +20,7 @@ Core Components:              Status:         Documentation:
 
 ┌──────────────┐              ✅ 100%         📄 Complete
 │ Backend      │──────────────────────────────▶  ARCHITECTURE.md
-│ (Node.js)    │              22 Endpoints
+│ (Node.js)    │              20 Endpoints
 └──────────────┘              5 Models
 
 ┌──────────────┐              ✅ 100%         📄 Complete
@@ -127,7 +127,7 @@ Backend (Node.js):
 ├── 5 Models (User, Item, Reading, Geofence, Alert)
 ├── 6 Routes (auth, items, readings, alerts, geofence, users)
 ├── 4 Services (MQTT, Alert, Geofence, Notification)
-├── 22 API Endpoints (Full CRUD operations)
+├── 20 API Endpoints (Full CRUD operations)
 ├── 1 Middleware (JWT authentication)
 ├── ~2,500 lines of JavaScript
 └── Dependencies: 15+ npm packages

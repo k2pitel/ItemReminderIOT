@@ -378,6 +378,31 @@ The backend exposes a RESTful API with 20 endpoints across 6 route groups:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+## 📚 Documentation
+
+Comprehensive documentation is available:
+
+- **[README.md](README.md)** - Main project overview and quick start
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture with detailed diagrams
+- **[FEATURES.md](docs/FEATURES.md)** - Complete feature list and technology stack
+- **[QUICKSTART.md](docs/QUICKSTART.md)** - 5-minute getting started guide
+- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment guide
+- **[DIAGRAMS.md](docs/DIAGRAMS.md)** - Index of all diagrams in the project
+- **[SUMMARY.md](SUMMARY.md)** - Implementation summary and project metrics
+- **[esp32/README.md](esp32/README.md)** - ESP32 hardware setup and firmware guide
+
+### Diagram Resources
+
+The project includes comprehensive visual diagrams:
+- **C4 Container-level (C2) diagrams** - System architecture
+- **UML Class diagrams** - Data models and relationships
+- **Sequence diagrams** - Data flows and interactions
+- **Block diagrams** - Component organization
+- **Hardware wiring diagrams** - ESP32 setup
+- **Deployment diagrams** - Infrastructure and scaling
+
+See [DIAGRAMS.md](docs/DIAGRAMS.md) for a complete index of all diagrams.
+
 ## 📄 License
 
 This project is licensed under the MIT License.
