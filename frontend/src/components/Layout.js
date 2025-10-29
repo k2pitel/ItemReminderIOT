@@ -23,6 +23,7 @@ import {
   Inventory as ItemsIcon,
   Analytics as AnalyticsIcon,
   Place as GeofenceIcon,
+  Map as MapIcon,
   Notifications as AlertsIcon,
   Settings as SettingsIcon,
   Logout as LogoutIcon
@@ -123,6 +124,7 @@ const Layout = ({ children }) => {
     { text: 'Items', icon: <ItemsIcon />, path: '/items' },
     { text: 'Analytics', icon: <AnalyticsIcon />, path: '/analytics' },
     { text: 'Geofences', icon: <GeofenceIcon />, path: '/geofences' },
+    { text: 'Map', icon: <MapIcon />, path: '/map' },
     { text: 'Alerts', icon: <AlertsIcon />, path: '/alerts' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/settings' }
   ];

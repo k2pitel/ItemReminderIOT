@@ -10,6 +10,7 @@ import Dashboard from './pages/Dashboard';
 import Items from './pages/Items';
 import Analytics from './pages/Analytics';
 import Geofences from './pages/Geofences';
+import Map from './pages/Map';
 import Alerts from './pages/Alerts';
 import Settings from './pages/Settings';
 import PrivateRoute from './components/PrivateRoute';
@@ -39,6 +40,7 @@ function App() {
               <Route path="/items" element={<PrivateRoute><Items /></PrivateRoute>} />
               <Route path="/analytics" element={<PrivateRoute><Analytics /></PrivateRoute>} />
               <Route path="/geofences" element={<PrivateRoute><Geofences /></PrivateRoute>} />
+              <Route path="/map" element={<PrivateRoute><Map /></PrivateRoute>} />
               <Route path="/alerts" element={<PrivateRoute><Alerts /></PrivateRoute>} />
               <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
               <Route path="*" element={<Navigate to="/" replace />} />
