@@ -45,6 +45,19 @@ const itemSchema = new mongoose.Schema({
     enum: ['OK', 'LOW', 'EMPTY', 'OFFLINE'],
     default: 'OK'
   },
+  wearableMode: {
+    type: Boolean,
+    default: false
+  },
+  isWorn: {
+    type: Boolean,
+    default: false
+  },
+  wearStatus: {
+    type: String,
+    enum: ['ON', 'OFF', 'N/A'],
+    default: 'N/A'
+  },
   lastReading: {
     type: Date,
     default: Date.now

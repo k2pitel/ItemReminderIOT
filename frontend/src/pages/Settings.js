@@ -133,27 +133,78 @@ const Settings = () => {
 
     setLocationError(null);
 
+    // Variables for smoothing
+    let positionHistory = [];
+    const HISTORY_SIZE = 5; // Average of last 5 positions
+    const MIN_MOVEMENT_THRESHOLD = 10; // Minimum 10 meters to update
+
     const options = {
       enableHighAccuracy: true,
       timeout: 10000,
       maximumAge: 5000
     };
 
+    // Helper function to calculate distance between two points (Haversine formula)
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371e3; // Earth's radius in meters
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+      return R * c; // Distance in meters
+    };
+
     const id = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude, accuracy } = position.coords;
         
-        setCurrentLocation({ latitude, longitude });
-        setAccuracy(accuracy);
+        // Add to history
+        positionHistory.push({ latitude, longitude, accuracy });
         
-        // Send location to backend
-        if (socket) {
-          socket.emit('location-update', {
-            latitude,
-            longitude,
-            accuracy,
-            timestamp: new Date().toISOString()
-          });
+        // Keep only recent positions
+        if (positionHistory.length > HISTORY_SIZE) {
+          positionHistory.shift();
+        }
+
+        // Calculate smoothed position (average of recent positions)
+        const smoothedLat = positionHistory.reduce((sum, pos) => sum + pos.latitude, 0) / positionHistory.length;
+        const smoothedLon = positionHistory.reduce((sum, pos) => sum + pos.longitude, 0) / positionHistory.length;
+        const avgAccuracy = positionHistory.reduce((sum, pos) => sum + pos.accuracy, 0) / positionHistory.length;
+
+        // Only update if we've moved significantly or don't have a current location
+        let shouldUpdate = !currentLocation;
+        
+        if (currentLocation) {
+          const distance = calculateDistance(
+            currentLocation.latitude,
+            currentLocation.longitude,
+            smoothedLat,
+            smoothedLon
+          );
+          
+          // Update if moved more than threshold OR accuracy improved significantly
+          shouldUpdate = distance > MIN_MOVEMENT_THRESHOLD || accuracy < avgAccuracy / 2;
+        }
+
+        if (shouldUpdate) {
+          setCurrentLocation({ latitude: smoothedLat, longitude: smoothedLon });
+          setAccuracy(avgAccuracy);
+          
+          // Send location to backend
+          if (socket) {
+            socket.emit('location-update', {
+              latitude: smoothedLat,
+              longitude: smoothedLon,
+              accuracy: avgAccuracy,
+              timestamp: new Date().toISOString()
+            });
+          }
         }
       },
       (error) => {

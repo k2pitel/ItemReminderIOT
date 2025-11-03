@@ -17,7 +17,9 @@ import {
   IconButton,
   Chip,
   MenuItem,
-  Typography
+  Typography,
+  FormControlLabel,
+  Switch
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
 import Layout from '../components/Layout';
@@ -33,7 +35,8 @@ const Items = () => {
     description: '',
     category: 'other',
     thresholdWeight: 10,
-    unit: 'grams'
+    unit: 'grams',
+    wearableMode: false
   });
 
   useEffect(() => {
@@ -58,7 +61,8 @@ const Items = () => {
         description: item.description || '',
         category: item.category,
         thresholdWeight: item.thresholdWeight,
-        unit: item.unit
+        unit: item.unit,
+        wearableMode: item.wearableMode || false
       });
     } else {
       setEditingItem(null);
@@ -68,7 +72,8 @@ const Items = () => {
         description: '',
         category: 'other',
         thresholdWeight: 10,
-        unit: 'grams'
+        unit: 'grams',
+        wearableMode: false
       });
     }
     setDialogOpen(true);
@@ -144,6 +149,7 @@ const Items = () => {
               <TableCell>Weight</TableCell>
               <TableCell>Threshold</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Wear Status</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -165,6 +171,17 @@ const Items = () => {
                     color={getStatusColor(item.status)}
                     size="small"
                   />
+                </TableCell>
+                <TableCell>
+                  {item.wearableMode ? (
+                    <Chip
+                      label={item.wearStatus || 'N/A'}
+                      color={item.wearStatus === 'ON' ? 'success' : item.wearStatus === 'OFF' ? 'error' : 'default'}
+                      size="small"
+                    />
+                  ) : (
+                    <Chip label="N/A" size="small" color="default" />
+                  )}
                 </TableCell>
                 <TableCell>
                   <IconButton
@@ -258,6 +275,22 @@ const Items = () => {
             <MenuItem value="oz">Ounces</MenuItem>
             <MenuItem value="lbs">Pounds</MenuItem>
           </TextField>
+          
+          <Box sx={{ mt: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.wearableMode}
+                  onChange={(e) => setFormData({ ...formData, wearableMode: e.target.checked })}
+                  name="wearableMode"
+                />
+              }
+              label="Enable Wearable Mode (ON/OFF detection)"
+            />
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+              Enable this for items like jackets or bags that can be worn/carried. The system will detect ON (worn) or OFF (not worn) status and alert you if you leave without it.
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>

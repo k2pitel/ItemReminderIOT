@@ -70,7 +70,7 @@ class MqttService {
   }
 
   async handleWeightData(data) {
-    const { device_id, item_name, weight, threshold, status, wifi_rssi } = data;
+    const { device_id, item_name, weight, threshold, status, wifi_rssi, wear_status } = data;
 
     try {
       // Find or create item
@@ -86,6 +86,13 @@ class MqttService {
       item.thresholdWeight = threshold;
       item.status = status;
       item.lastReading = new Date();
+      
+      // Handle wearable mode (ON/OFF detection)
+      if (wear_status !== undefined) {
+        item.wearStatus = wear_status;
+        item.isWorn = wear_status === 'ON';
+      }
+      
       await item.save();
 
       // Save reading
@@ -106,6 +113,8 @@ class MqttService {
           deviceId: device_id,
           weight,
           status,
+          wearStatus: item.wearStatus,
+          isWorn: item.isWorn,
           timestamp: new Date()
         });
       }

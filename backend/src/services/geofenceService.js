@@ -115,21 +115,42 @@ class GeofenceService {
           geofence.userCurrentlyInside = false;
           geofence.userExitedAt = now;
 
-          // 🚨 SMART ALERT: Check if leaving without essential items
+          // SMART ALERT: Check if leaving without essential items
           if (geofence.itemId && geofence.alertSettings?.leaveWithoutItems) {
             const item = geofence.itemId;
             
-            // Check if item is low or empty
-            if (item.status === 'LOW' || item.status === 'EMPTY') {
+            // Check if item is low/empty OR if wearable item is not being worn (OFF)
+            const shouldAlert = 
+              item.status === 'LOW' || 
+              item.status === 'EMPTY' || 
+              (item.wearableMode && item.wearStatus === 'OFF');
+            
+            if (shouldAlert) {
+              let alertMessage = '';
+              let alertSeverity = 'high';
+              
+              if (item.wearStatus === 'OFF') {
+                alertMessage = `Don't forget your ${item.name}! It's not being worn - you're leaving ${geofence.name}`;
+                alertSeverity = 'critical';
+              } else if (item.status === 'EMPTY') {
+                alertMessage = `Don't forget! ${item.name} is ${item.status.toLowerCase()} - you're leaving ${geofence.name}`;
+                alertSeverity = 'critical';
+              } else {
+                alertMessage = `Don't forget! ${item.name} is ${item.status.toLowerCase()} - you're leaving ${geofence.name}`;
+                alertSeverity = 'high';
+              }
+              
               const alert = await alertService.createAlert({
                 userId: userId,
                 itemId: item._id,
                 type: 'geofence_exit',
-                severity: item.status === 'EMPTY' ? 'critical' : 'high',
-                message: `⚠️ Don't forget! ${item.name} is ${item.status.toLowerCase()} - you're leaving ${geofence.name}`,
+                severity: alertSeverity,
+                message: alertMessage,
                 data: {
                   geofenceName: geofence.name,
                   itemStatus: item.status,
+                  wearStatus: item.wearStatus,
+                  isWorn: item.isWorn,
                   weight: item.currentWeight,
                   exitTime: now,
                   location: userLocation
@@ -140,6 +161,7 @@ class GeofenceService {
                 geofenceName: geofence.name,
                 itemName: item.name,
                 status: item.status,
+                wearStatus: item.wearStatus,
                 alert: alert
               });
             }
