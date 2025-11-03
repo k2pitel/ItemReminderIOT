@@ -8,12 +8,19 @@ import {
   Grid,
   Switch,
   FormControlLabel,
-  Divider
+  Divider,
+  Alert,
+  Chip
 } from '@mui/material';
+import { LocationOn, GpsFixed } from '@mui/icons-material';
 import Layout from '../components/Layout';
 import api from '../services/api';
+import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 
 const Settings = () => {
+  const { socket } = useSocket();
+  const { user } = useAuth();
   const [profile, setProfile] = useState({
     username: '',
     email: '',
@@ -26,12 +33,36 @@ const Settings = () => {
     push: true,
     sms: false
   });
+  const [isTracking, setIsTracking] = useState(false);
+  const [watchId, setWatchId] = useState(null);
+  const [currentLocation, setCurrentLocation] = useState(null);
+  const [accuracy, setAccuracy] = useState(null);
+  const [locationError, setLocationError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     fetchProfile();
+    
+    // Check if tracking was previously enabled
+    const savedTracking = localStorage.getItem('locationTrackingEnabled') === 'true';
+    if (savedTracking) {
+      setIsTracking(true);
+      startTracking();
+    }
   }, []);
+
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    // Authenticate socket for location tracking
+    socket.emit('authenticate', { userId: user.id });
+
+    // Request notification permission
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [socket, user]);
 
   const fetchProfile = async () => {
     try {
@@ -91,6 +122,69 @@ const Settings = () => {
       console.error('Error updating notifications:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const startTracking = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by this browser');
+      return;
+    }
+
+    setLocationError(null);
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 5000
+    };
+
+    const id = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        
+        setCurrentLocation({ latitude, longitude });
+        setAccuracy(accuracy);
+        
+        // Send location to backend
+        if (socket) {
+          socket.emit('location-update', {
+            latitude,
+            longitude,
+            accuracy,
+            timestamp: new Date().toISOString()
+          });
+        }
+      },
+      (error) => {
+        setLocationError(`Location error: ${error.message}`);
+        setIsTracking(false);
+        localStorage.setItem('locationTrackingEnabled', 'false');
+      },
+      options
+    );
+
+    setWatchId(id);
+  };
+
+  const stopTracking = () => {
+    if (watchId) {
+      navigator.geolocation.clearWatch(watchId);
+      setWatchId(null);
+    }
+    setCurrentLocation(null);
+    setAccuracy(null);
+  };
+
+  const handleTrackingToggle = (event) => {
+    const enabled = event.target.checked;
+    setIsTracking(enabled);
+    localStorage.setItem('locationTrackingEnabled', enabled.toString());
+    
+    if (enabled) {
+      startTracking();
+    } else {
+      stopTracking();
     }
   };
 
@@ -216,6 +310,69 @@ const Settings = () => {
             >
               Update Preferences
             </Button>
+          </Paper>
+
+          <Paper sx={{ p: 3, mt: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              📍 Location Tracking
+            </Typography>
+            <Divider sx={{ my: 2 }} />
+            
+            {locationError && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {locationError}
+              </Alert>
+            )}
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isTracking}
+                  onChange={handleTrackingToggle}
+                  color="primary"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body1">
+                    Enable GPS Tracking
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Track your location for geofence alerts
+                  </Typography>
+                </Box>
+              }
+            />
+
+            {isTracking && (
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'success.light', borderRadius: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <GpsFixed color="success" />
+                  <Chip label="Tracking Active" color="success" size="small" />
+                </Box>
+                {currentLocation && (
+                  <>
+                    <Typography variant="body2">
+                      <LocationOn fontSize="small" sx={{ verticalAlign: 'middle' }} />
+                      {' '}Latitude: {currentLocation.latitude.toFixed(6)}
+                    </Typography>
+                    <Typography variant="body2">
+                      <LocationOn fontSize="small" sx={{ verticalAlign: 'middle' }} />
+                      {' '}Longitude: {currentLocation.longitude.toFixed(6)}
+                    </Typography>
+                    {accuracy && (
+                      <Typography variant="caption" color="text.secondary">
+                        Accuracy: ±{Math.round(accuracy)}m
+                      </Typography>
+                    )}
+                  </>
+                )}
+              </Box>
+            )}
+
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+              💡 Location tracking runs in the background and enables geofence alerts when you enter or leave configured areas.
+            </Typography>
           </Paper>
 
           <Paper sx={{ p: 3, mt: 3 }}>

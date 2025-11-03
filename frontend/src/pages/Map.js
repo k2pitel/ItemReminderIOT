@@ -74,6 +74,13 @@ const Map = () => {
   useEffect(() => {
     fetchGeofences();
     
+    // Check if tracking was previously enabled
+    const savedTracking = localStorage.getItem('locationTrackingEnabled') === 'true';
+    if (savedTracking) {
+      setIsTracking(true);
+      startTracking();
+    }
+    
     // Request notification permission
     if (Notification.permission === 'default') {
       Notification.requestPermission();
@@ -123,7 +130,6 @@ const Map = () => {
     }
 
     setError(null);
-    setIsTracking(true);
 
     const options = {
       enableHighAccuracy: true,
@@ -152,6 +158,7 @@ const Map = () => {
       (error) => {
         setError(`Location error: ${error.message}`);
         setIsTracking(false);
+        localStorage.setItem('locationTrackingEnabled', 'false');
       },
       options
     );
@@ -164,11 +171,16 @@ const Map = () => {
       navigator.geolocation.clearWatch(watchId);
       setWatchId(null);
     }
-    setIsTracking(false);
+    setUserLocation(null);
+    setAccuracy(null);
   };
 
   const handleTrackingToggle = (event) => {
-    if (event.target.checked) {
+    const enabled = event.target.checked;
+    setIsTracking(enabled);
+    localStorage.setItem('locationTrackingEnabled', enabled.toString());
+    
+    if (enabled) {
       startTracking();
     } else {
       stopTracking();
@@ -196,7 +208,7 @@ const Map = () => {
     <Layout>
       <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Typography variant="h4" sx={{ flexGrow: 1 }}>
-          🗺️ Live Map
+          Live Map
         </Typography>
         
         <FormControlLabel
@@ -253,7 +265,7 @@ const Map = () => {
                 Your Location
               </Typography>
               <Typography variant="body1">
-                📍 {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
+                {userLocation.latitude.toFixed(6)}, {userLocation.longitude.toFixed(6)}
               </Typography>
               {accuracy && (
                 <Typography variant="caption" color="text.secondary">
@@ -296,7 +308,7 @@ const Map = () => {
               icon={userIcon}
             >
               <Popup>
-                <strong>📍 You are here</strong>
+                <strong>You are here</strong>
                 <br />
                 Lat: {userLocation.latitude.toFixed(6)}
                 <br />
@@ -348,7 +360,7 @@ const Map = () => {
 
       <Box sx={{ mt: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          💡 <strong>Legend:</strong> 🔵 Blue marker = You | 🔴 Red markers = Geofences | 
+          Legend: Blue marker = You | Red markers = Geofences | 
           Green circles = Enter trigger | Orange circles = Exit trigger | Red circles = Both triggers
         </Typography>
       </Box>
