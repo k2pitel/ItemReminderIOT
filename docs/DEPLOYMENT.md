@@ -1,5 +1,52 @@
 # Deployment Guide
 
+## Deployment Architecture Overview
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                      Deployment Scenarios                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────┐  ┌──────────────────────┐  ┌─────────────────┐
+│  Local Development   │  │  Docker Deployment   │  │ Cloud Hosting   │
+│                      │  │                      │  │                 │
+│  • Manual setup      │  │  • One command       │  │  • AWS/DO/Azure │
+│  • Multiple terminal │  │  • Isolated services │  │  • Production   │
+│  • Fast iteration    │  │  • Easy cleanup      │  │  • Scalable     │
+│  • Debug friendly    │  │  • Consistent env    │  │  • Managed DB   │
+└──────────────────────┘  └──────────────────────┘  └─────────────────┘
+
+Production Architecture (Recommended):
+═══════════════════════════════════════
+
+                           Internet
+                              │
+                              ▼
+                        ┌──────────┐
+                        │  Nginx   │  SSL/TLS Termination
+                        │  Proxy   │  Load Balancing
+                        └────┬─────┘  Static Files
+                             │
+              ┌──────────────┼──────────────┐
+              │              │              │
+              ▼              ▼              ▼
+         ┌─────────┐   ┌─────────┐   ┌─────────┐
+         │Backend 1│   │Backend 2│   │Backend 3│
+         │(Node.js)│   │(Node.js)│   │(Node.js)│
+         └────┬────┘   └────┬────┘   └────┬────┘
+              │              │              │
+              └──────────────┼──────────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+         ┌──────────┐                 ┌──────────┐
+         │ MongoDB  │                 │   MQTT   │
+         │ Replica  │                 │ Cluster  │
+         │   Set    │                 │(Mosquitto)│
+         └──────────┘                 └──────────┘
+```
+
 ## Prerequisites
 
 - Docker and Docker Compose installed
@@ -7,6 +54,52 @@
 - SSL certificate (optional, for HTTPS)
 
 ## Docker Deployment
+
+### Docker Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Docker Compose Network                             │
+│                                                                       │
+│  ┌─────────────────┐         ┌─────────────────┐                    │
+│  │   frontend      │         │    backend      │                    │
+│  │  Container      │         │   Container     │                    │
+│  │                 │         │                 │                    │
+│  │  Nginx:alpine   │         │  Node.js 18     │                    │
+│  │  Port: 3000     │◀───────▶│  Port: 5000     │                    │
+│  │                 │  HTTP   │                 │                    │
+│  └─────────────────┘         └────────┬────────┘                    │
+│                                       │                              │
+│                              ┌────────┴────────┐                     │
+│                              │                 │                     │
+│                              ▼                 ▼                     │
+│                    ┌─────────────────┐  ┌─────────────────┐         │
+│                    │   mongodb       │  │   mosquitto     │         │
+│                    │   Container     │  │   Container     │         │
+│                    │                 │  │                 │         │
+│                    │  MongoDB 6      │  │  Mosquitto 2    │         │
+│                    │  Port: 27017    │  │  Port: 1883     │         │
+│                    │                 │  │                 │         │
+│                    │  Volume:        │  │  Volume:        │         │
+│                    │  mongodb_data   │  │  mosquitto_data │         │
+│                    └─────────────────┘  └─────────────────┘         │
+│                                                                       │
+│  Networks:                                                           │
+│  • backend  - Internal network for services                          │
+│  • frontend - Frontend-backend communication                         │
+│                                                                       │
+│  Volumes:                                                            │
+│  • mongodb_data    - Persistent database storage                     │
+│  • mosquitto_data  - MQTT broker data persistence                    │
+└──────────────────────────────────────────────────────────────────────┘
+
+External Access:
+────────────────
+• Frontend:  http://localhost:3000
+• Backend:   http://localhost:5000
+• MongoDB:   localhost:27017 (development only)
+• MQTT:      localhost:1883
+```
 
 ### 1. Clone Repository
 
