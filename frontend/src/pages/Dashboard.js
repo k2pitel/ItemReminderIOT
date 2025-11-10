@@ -9,7 +9,6 @@ import {
   LinearProgress
 } from '@mui/material';
 import Layout from '../components/Layout';
-import LocationTracker from '../components/LocationTracker';
 import api from '../services/api';
 
 const Dashboard = () => {
@@ -34,15 +33,26 @@ const Dashboard = () => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'OK':
+      case 'ON':
         return 'success';
       case 'LOW':
       case 'EMPTY':
+      case 'OFF':
         return 'warning';
       case 'OFFLINE':
         return 'error';
       default:
         return 'default';
     }
+  };
+
+  const getStatusLabel = (item) => {
+    // For wearable mode, show ON/OFF
+    if (item.detectionMode === 'wearable') {
+      return item.status === 'ON' || item.status === 'OFF' ? item.status : item.wearStatus || 'N/A';
+    }
+    // For weight mode, show LOW/OK/EMPTY
+    return item.status;
   };
 
   const getPercentage = (current, threshold) => {
@@ -67,11 +77,6 @@ const Dashboard = () => {
       </Typography>
 
       <Grid container spacing={3}>
-        {/* GPS Location Tracker */}
-        <Grid item xs={12} md={4}>
-          <LocationTracker />
-        </Grid>
-
         {/* Item Status Cards */}
         {items.length === 0 ? (
           <Grid item xs={12}>
@@ -91,7 +96,7 @@ const Dashboard = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                     <Typography variant="h6">{item.name}</Typography>
                     <Chip
-                      label={item.status}
+                      label={getStatusLabel(item)}
                       color={getStatusColor(item.status)}
                       size="small"
                     />
@@ -104,17 +109,19 @@ const Dashboard = () => {
                   <Box sx={{ mt: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                       <Typography variant="body2">
-                        Weight: {item.currentWeight?.toFixed(1) || 0} {item.unit}
+                        {item.detectionMode === 'wearable' ? 'Status' : 'Weight'}: {item.detectionMode === 'wearable' ? getStatusLabel(item) : `${item.currentWeight?.toFixed(1) || 0} ${item.unit}`}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Threshold: {item.thresholdWeight} {item.unit}
+                        {item.detectionMode === 'wearable' ? 'Mode: ON/OFF' : `Threshold: ${item.thresholdWeight} ${item.unit}`}
                       </Typography>
                     </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={getPercentage(item.currentWeight, item.thresholdWeight)}
-                      color={getStatusColor(item.status)}
-                    />
+                    {item.detectionMode !== 'wearable' && (
+                      <LinearProgress
+                        variant="determinate"
+                        value={getPercentage(item.currentWeight, item.thresholdWeight)}
+                        color={getStatusColor(item.status)}
+                      />
+                    )}
                   </Box>
 
                   <Box sx={{ mt: 2 }}>

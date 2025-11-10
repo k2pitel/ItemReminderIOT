@@ -7,11 +7,6 @@ const geofenceSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  itemId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Item',
-    required: true
-  },
   name: {
     type: String,
     required: true,
@@ -32,15 +27,6 @@ const geofenceSchema = new mongoose.Schema({
     required: true,
     default: 100 // meters
   },
-  triggerCondition: {
-    type: String,
-    enum: ['enter', 'exit', 'both'],
-    default: 'both'
-  },
-  alertWhenLow: {
-    type: Boolean,
-    default: true
-  },
   active: {
     type: Boolean,
     default: true
@@ -59,20 +45,6 @@ const geofenceSchema = new mongoose.Schema({
   lastLocationUpdate: {
     type: Date,
     default: Date.now
-  },
-  alertSettings: {
-    notifyOnExit: {
-      type: Boolean,
-      default: true
-    },
-    notifyOnLowItemExit: {
-      type: Boolean,
-      default: true
-    },
-    minimumTimeInside: {
-      type: Number, // minutes
-      default: 30
-    }
   },
   createdAt: {
     type: Date,

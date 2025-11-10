@@ -15,12 +15,7 @@ import {
   TableRow,
   Paper,
   IconButton,
-  MenuItem,
-  Typography,
-  Chip,
-  FormControlLabel,
-  Switch,
-  Divider
+  Typography
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents } from 'react-leaflet';
@@ -49,28 +44,18 @@ const LocationMarker = ({ position, setPosition }) => {
 
 const Geofences = () => {
   const [geofences, setGeofences] = useState([]);
-  const [items, setItems] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingGeofence, setEditingGeofence] = useState(null);
   const [mapPosition, setMapPosition] = useState(null);
   const [formData, setFormData] = useState({
-    itemId: '',
     name: '',
     latitude: 0,
     longitude: 0,
-    radius: 100,
-    triggerCondition: 'both',
-    alertWhenLow: true,
-    alertSettings: {
-      leaveWithoutItems: true,
-      emailNotifications: true,
-      pushNotifications: true
-    }
+    radius: 100
   });
 
   useEffect(() => {
     fetchGeofences();
-    fetchItems();
   }, []);
 
   const fetchGeofences = async () => {
@@ -82,31 +67,14 @@ const Geofences = () => {
     }
   };
 
-  const fetchItems = async () => {
-    try {
-      const response = await api.get('/items');
-      setItems(response.data);
-    } catch (error) {
-      console.error('Error fetching items:', error);
-    }
-  };
-
   const handleOpenDialog = (geofence = null) => {
     if (geofence) {
       setEditingGeofence(geofence);
       setFormData({
-        itemId: geofence.itemId._id,
         name: geofence.name,
         latitude: geofence.location.latitude,
         longitude: geofence.location.longitude,
-        radius: geofence.radius,
-        triggerCondition: geofence.triggerCondition,
-        alertWhenLow: geofence.alertWhenLow,
-        alertSettings: geofence.alertSettings || {
-          leaveWithoutItems: true,
-          emailNotifications: true,
-          pushNotifications: true
-        }
+        radius: geofence.radius
       });
       setMapPosition({
         lat: geofence.location.latitude,
@@ -115,18 +83,10 @@ const Geofences = () => {
     } else {
       setEditingGeofence(null);
       setFormData({
-        itemId: items[0]?._id || '',
         name: '',
         latitude: 0,
         longitude: 0,
-        radius: 100,
-        triggerCondition: 'both',
-        alertWhenLow: true,
-        alertSettings: {
-          leaveWithoutItems: true,
-          emailNotifications: true,
-          pushNotifications: true
-        }
+        radius: 100
       });
       setMapPosition(null);
     }
@@ -140,24 +100,11 @@ const Geofences = () => {
   };
 
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    
-    // Handle nested alertSettings
-    if (name.startsWith('alertSettings.')) {
-      const settingName = name.split('.')[1];
-      setFormData({
-        ...formData,
-        alertSettings: {
-          ...formData.alertSettings,
-          [settingName]: type === 'checkbox' ? checked : value
-        }
-      });
-    } else {
-      setFormData({
-        ...formData,
-        [name]: type === 'checkbox' ? checked : value
-      });
-    }
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
   };
 
   useEffect(() => {
@@ -173,15 +120,12 @@ const Geofences = () => {
   const handleSubmit = async () => {
     try {
       const data = {
-        itemId: formData.itemId,
         name: formData.name,
         location: {
           latitude: formData.latitude,
           longitude: formData.longitude
         },
-        radius: formData.radius,
-        triggerCondition: formData.triggerCondition,
-        alertWhenLow: formData.alertWhenLow
+        radius: formData.radius
       };
 
       if (editingGeofence) {
@@ -215,29 +159,18 @@ const Geofences = () => {
           variant="contained"
           startIcon={<Add />}
           onClick={() => handleOpenDialog()}
-          disabled={items.length === 0}
         >
           Add Geofence
         </Button>
       </Box>
 
-      {items.length === 0 ? (
-        <Paper sx={{ p: 3 }}>
-          <Typography align="center" color="text.secondary">
-            Add items first before creating geofences
-          </Typography>
-        </Paper>
-      ) : (
-        <TableContainer component={Paper}>
+      <TableContainer component={Paper}>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell>Name</TableCell>
-                <TableCell>Item</TableCell>
                 <TableCell>Location</TableCell>
                 <TableCell>Radius</TableCell>
-                <TableCell>Trigger</TableCell>
-                <TableCell>Alert When Low</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -245,17 +178,10 @@ const Geofences = () => {
               {geofences.map((geofence) => (
                 <TableRow key={geofence._id}>
                   <TableCell>{geofence.name}</TableCell>
-                  <TableCell>{geofence.itemId?.name || 'N/A'}</TableCell>
                   <TableCell>
                     {geofence.location.latitude.toFixed(4)}, {geofence.location.longitude.toFixed(4)}
                   </TableCell>
                   <TableCell>{geofence.radius}m</TableCell>
-                  <TableCell>
-                    <Chip label={geofence.triggerCondition} size="small" />
-                  </TableCell>
-                  <TableCell>
-                    {geofence.alertWhenLow ? 'Yes' : 'No'}
-                  </TableCell>
                   <TableCell>
                     <IconButton
                       size="small"
@@ -276,29 +202,12 @@ const Geofences = () => {
             </TableBody>
           </Table>
         </TableContainer>
-      )}
 
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="md" fullWidth>
         <DialogTitle>
           {editingGeofence ? 'Edit Geofence' : 'Add Geofence'}
         </DialogTitle>
         <DialogContent>
-          <TextField
-            fullWidth
-            select
-            label="Item"
-            name="itemId"
-            value={formData.itemId}
-            onChange={handleChange}
-            margin="normal"
-            required
-          >
-            {items.map((item) => (
-              <MenuItem key={item._id} value={item._id}>
-                {item.name}
-              </MenuItem>
-            ))}
-          </TextField>
           <TextField
             fullWidth
             label="Geofence Name"
@@ -365,74 +274,12 @@ const Geofences = () => {
             margin="normal"
             required
           />
-          <TextField
-            fullWidth
-            select
-            label="Trigger Condition"
-            name="triggerCondition"
-            value={formData.triggerCondition}
-            onChange={handleChange}
-            margin="normal"
-          >
-            <MenuItem value="enter">Enter</MenuItem>
-            <MenuItem value="exit">Exit</MenuItem>
-            <MenuItem value="both">Both</MenuItem>
-          </TextField>
-          <TextField
-            fullWidth
-            select
-            label="Alert When Item is Low"
-            name="alertWhenLow"
-            value={formData.alertWhenLow}
-            onChange={handleChange}
-            margin="normal"
-          >
-            <MenuItem value={true}>Yes</MenuItem>
-            <MenuItem value={false}>No</MenuItem>
-          </TextField>
 
-          <Divider sx={{ my: 3 }} />
-          
-          <Typography variant="h6" gutterBottom>
-            🚨 Smart Alert Settings
-          </Typography>
-          
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.alertSettings?.leaveWithoutItems || false}
-                onChange={handleChange}
-                name="alertSettings.leaveWithoutItems"
-              />
-            }
-            label="Alert when leaving without essential items"
-          />
-          
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.alertSettings?.emailNotifications || false}
-                onChange={handleChange}
-                name="alertSettings.emailNotifications"
-              />
-            }
-            label="Email notifications"
-          />
-          
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formData.alertSettings?.pushNotifications || false}
-                onChange={handleChange}
-                name="alertSettings.pushNotifications"
-              />
-            }
-            label="Browser notifications"
-          />
-          
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-            💡 Smart alerts track your GPS location and warn you if you leave this area while monitored items are low or empty
-          </Typography>
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+            <Typography variant="caption" color="text.secondary" display="block">
+              💡 Multiple items can now use the same geofence! Assign this geofence to items on the Items page.
+            </Typography>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCloseDialog}>Cancel</Button>

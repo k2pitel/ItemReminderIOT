@@ -1,4 +1,5 @@
 const Geofence = require('../models/Geofence');
+const Item = require('../models/Item');
 const User = require('../models/User');
 const geolib = require('geolib');
 const logger = require('../utils/logger');
@@ -17,14 +18,9 @@ class GeofenceService {
     }
   }
 
-  async getGeofences(userId, itemId = null) {
+  async getGeofences(userId) {
     try {
-      const query = { userId, active: true };
-      if (itemId) query.itemId = itemId;
-
-      const geofences = await Geofence.find(query)
-        .populate('itemId', 'name status currentWeight');
-      
+      const geofences = await Geofence.find({ userId, active: true });
       return geofences;
     } catch (error) {
       logger.error('Error getting geofences:', error);
@@ -58,47 +54,18 @@ class GeofenceService {
     }
   }
 
-  async checkGeofenceAlerts(item) {
-    try {
-      const geofences = await Geofence.find({
-        userId: item.userId,
-        itemId: item._id,
-        active: true
-      });
-
-      for (const geofence of geofences) {
-        // Check if item is low and alert is enabled
-        if (geofence.alertWhenLow && item.status === 'LOW') {
-          await alertService.createAlert({
-            userId: item.userId,
-            itemId: item._id,
-            type: 'geofence',
-            severity: 'warning',
-            message: `${item.name} is low in ${geofence.name} area`,
-            data: {
-              geofenceName: geofence.name,
-              location: geofence.location,
-              weight: item.currentWeight
-            }
-          });
-        }
-      }
-    } catch (error) {
-      logger.error('Error checking geofence alerts:', error);
-    }
-  }
-
   async updateUserLocation(userId, userLocation) {
     try {
-      const geofences = await Geofence.find({ userId, active: true }).populate('itemId');
+      const geofences = await Geofence.find({ userId, active: true });
+      const items = await Item.find({ userId, active: true, geofenceId: { $ne: null } }).populate('geofenceId');
       const now = new Date();
       const alertsTriggered = [];
 
+      // Update geofence tracking
       for (const geofence of geofences) {
         const isInside = this.isPointInGeofence(userLocation, geofence);
         const wasInside = geofence.userCurrentlyInside;
 
-        // Update geofence tracking
         geofence.lastLocationUpdate = now;
 
         // User entering geofence
@@ -108,66 +75,20 @@ class GeofenceService {
           geofence.userExitedAt = null;
           
           logger.info(`User ${userId} entered geofence: ${geofence.name}`);
+          
+          // Check for items with "enter" or "both" trigger
+          await this.checkItemsForGeofence(userId, geofence, items, 'enter', userLocation, alertsTriggered);
         }
         
-        // User leaving geofence - CHECK FOR SMART ALERTS!
+        // User leaving geofence
         else if (!isInside && wasInside) {
           geofence.userCurrentlyInside = false;
           geofence.userExitedAt = now;
 
-          // SMART ALERT: Check if leaving without essential items
-          if (geofence.itemId && geofence.alertSettings?.leaveWithoutItems) {
-            const item = geofence.itemId;
-            
-            // Check if item is low/empty OR if wearable item is not being worn (OFF)
-            const shouldAlert = 
-              item.status === 'LOW' || 
-              item.status === 'EMPTY' || 
-              (item.wearableMode && item.wearStatus === 'OFF');
-            
-            if (shouldAlert) {
-              let alertMessage = '';
-              let alertSeverity = 'high';
-              
-              if (item.wearStatus === 'OFF') {
-                alertMessage = `Don't forget your ${item.name}! It's not being worn - you're leaving ${geofence.name}`;
-                alertSeverity = 'critical';
-              } else if (item.status === 'EMPTY') {
-                alertMessage = `Don't forget! ${item.name} is ${item.status.toLowerCase()} - you're leaving ${geofence.name}`;
-                alertSeverity = 'critical';
-              } else {
-                alertMessage = `Don't forget! ${item.name} is ${item.status.toLowerCase()} - you're leaving ${geofence.name}`;
-                alertSeverity = 'high';
-              }
-              
-              const alert = await alertService.createAlert({
-                userId: userId,
-                itemId: item._id,
-                type: 'geofence_exit',
-                severity: alertSeverity,
-                message: alertMessage,
-                data: {
-                  geofenceName: geofence.name,
-                  itemStatus: item.status,
-                  wearStatus: item.wearStatus,
-                  isWorn: item.isWorn,
-                  weight: item.currentWeight,
-                  exitTime: now,
-                  location: userLocation
-                }
-              });
-
-              alertsTriggered.push({
-                geofenceName: geofence.name,
-                itemName: item.name,
-                status: item.status,
-                wearStatus: item.wearStatus,
-                alert: alert
-              });
-            }
-          }
-
           logger.info(`User ${userId} left geofence: ${geofence.name}`);
+          
+          // Check for items with "exit" or "both" trigger
+          await this.checkItemsForGeofence(userId, geofence, items, 'exit', userLocation, alertsTriggered);
         }
 
         await geofence.save();
@@ -187,6 +108,70 @@ class GeofenceService {
     } catch (error) {
       logger.error('Error updating user location:', error);
       throw error;
+    }
+  }
+
+  async checkItemsForGeofence(userId, geofence, items, triggerType, userLocation, alertsTriggered) {
+    const relevantItems = items.filter(item => 
+      item.geofenceId && 
+      item.geofenceId._id.toString() === geofence._id.toString() &&
+      (item.triggerCondition === triggerType || item.triggerCondition === 'both')
+    );
+
+    for (const item of relevantItems) {
+      let shouldAlert = false;
+      let alertMessage = '';
+      let alertSeverity = 'medium';
+
+      // Check conditions based on detection mode
+      if (item.detectionMode === 'wearable') {
+        // Wearable mode: Alert if OFF (not worn) or status is OFF
+        if (item.wearStatus === 'OFF' || item.status === 'OFF') {
+          shouldAlert = true;
+          alertMessage = item.customAlertMessage || 
+            `Don't forget your ${item.name}! It's not being worn.`;
+          alertSeverity = 'high';
+        }
+      } else {
+        // Weight mode: Alert if LOW or EMPTY
+        if (item.status === 'LOW' || item.status === 'EMPTY') {
+          shouldAlert = true;
+          alertMessage = item.customAlertMessage || 
+            `${item.name} is ${item.status.toLowerCase()}!`;
+          alertSeverity = item.status === 'EMPTY' ? 'critical' : 'high';
+        }
+      }
+
+      if (shouldAlert) {
+        const alert = await alertService.createAlert({
+          userId: userId,
+          itemId: item._id,
+          type: `geofence_${triggerType}`,
+          severity: alertSeverity,
+          message: alertMessage,
+          data: {
+            geofenceName: geofence.name,
+            itemStatus: item.status,
+            wearStatus: item.wearStatus,
+            detectionMode: item.detectionMode,
+            weight: item.currentWeight,
+            triggerType: triggerType,
+            location: userLocation
+          }
+        });
+
+        alertsTriggered.push({
+          geofenceName: geofence.name,
+          itemName: item.name,
+          status: item.status,
+          wearStatus: item.wearStatus,
+          detectionMode: item.detectionMode,
+          triggerType: triggerType,
+          alert: alert
+        });
+
+        logger.info(`Alert triggered for ${item.name} on ${triggerType} ${geofence.name}`);
+      }
     }
   }
 

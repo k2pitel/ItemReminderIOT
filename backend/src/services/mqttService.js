@@ -81,16 +81,43 @@ class MqttService {
         return;
       }
 
-      // Update item
+      // Update basic data
       item.currentWeight = weight;
       item.thresholdWeight = threshold;
-      item.status = status;
       item.lastReading = new Date();
       
-      // Handle wearable mode (ON/OFF detection)
+      // Handle detection mode and status
       if (wear_status !== undefined) {
+        // Wearable mode detected
         item.wearStatus = wear_status;
         item.isWorn = wear_status === 'ON';
+        
+        // Auto-set detection mode if not already set
+        if (!item.detectionMode || item.detectionMode !== 'wearable') {
+          item.detectionMode = 'wearable';
+          item.wearableMode = true;
+        }
+        
+        // For wearable mode, use wearStatus as the main status
+        item.status = wear_status; // Will be 'ON' or 'OFF'
+      } else {
+        // Weight mode (no wear_status provided)
+        if (!item.detectionMode || item.detectionMode !== 'weight') {
+          item.detectionMode = 'weight';
+          item.wearableMode = false;
+        }
+        
+        // For weight mode, use the status from sensor (LOW/OK/EMPTY)
+        item.status = status;
+        item.wearStatus = 'N/A';
+      }
+      
+      // Special logic: If wearable mode and weight is close to 0, force OFF status
+      if (item.detectionMode === 'wearable' && weight < 5) {
+        item.wearStatus = 'OFF';
+        item.isWorn = false;
+        item.status = 'OFF';
+        logger.info(`Auto-detected OFF status for ${item.name} (weight: ${weight})`);
       }
       
       await item.save();

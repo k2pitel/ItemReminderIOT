@@ -137,11 +137,13 @@ const Settings = () => {
     let positionHistory = [];
     const HISTORY_SIZE = 5; // Average of last 5 positions
     const MIN_MOVEMENT_THRESHOLD = 10; // Minimum 10 meters to update
+    let lastUpdateTime = 0;
+    const MIN_UPDATE_INTERVAL = 3000; // Minimum 3 seconds between updates
 
     const options = {
       enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 5000
+      timeout: 30000, // Increased timeout to 30 seconds
+      maximumAge: 10000 // Allow cached positions up to 10 seconds old
     };
 
     // Helper function to calculate distance between two points (Haversine formula)
@@ -163,6 +165,7 @@ const Settings = () => {
     const id = navigator.geolocation.watchPosition(
       (position) => {
         const { latitude, longitude, accuracy } = position.coords;
+        const now = Date.now();
         
         // Add to history
         positionHistory.push({ latitude, longitude, accuracy });
@@ -180,7 +183,7 @@ const Settings = () => {
         // Only update if we've moved significantly or don't have a current location
         let shouldUpdate = !currentLocation;
         
-        if (currentLocation) {
+        if (currentLocation && now - lastUpdateTime > MIN_UPDATE_INTERVAL) {
           const distance = calculateDistance(
             currentLocation.latitude,
             currentLocation.longitude,
@@ -189,10 +192,11 @@ const Settings = () => {
           );
           
           // Update if moved more than threshold OR accuracy improved significantly
-          shouldUpdate = distance > MIN_MOVEMENT_THRESHOLD || accuracy < avgAccuracy / 2;
+          shouldUpdate = distance > MIN_MOVEMENT_THRESHOLD || (accuracy < 20 && accuracy < avgAccuracy / 2);
         }
 
         if (shouldUpdate) {
+          lastUpdateTime = now;
           setCurrentLocation({ latitude: smoothedLat, longitude: smoothedLon });
           setAccuracy(avgAccuracy);
           
@@ -208,9 +212,13 @@ const Settings = () => {
         }
       },
       (error) => {
-        setLocationError(`Location error: ${error.message}`);
-        setIsTracking(false);
-        localStorage.setItem('locationTrackingEnabled', 'false');
+        console.warn('Location error:', error);
+        // Don't disable tracking on timeout errors
+        if (error.code !== error.TIMEOUT) {
+          setLocationError(`Location error: ${error.message}`);
+          setIsTracking(false);
+          localStorage.setItem('locationTrackingEnabled', 'false');
+        }
       },
       options
     );

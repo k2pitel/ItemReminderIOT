@@ -21,10 +21,20 @@ const itemSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  category: {
+  geofenceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Geofence',
+    default: null
+  },
+  triggerCondition: {
     type: String,
-    enum: ['medication', 'grocery', 'supply', 'other'],
-    default: 'other'
+    enum: ['enter', 'exit', 'both'],
+    default: 'exit'
+  },
+  customAlertMessage: {
+    type: String,
+    trim: true,
+    default: ''
   },
   thresholdWeight: {
     type: Number,
@@ -42,8 +52,13 @@ const itemSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['OK', 'LOW', 'EMPTY', 'OFFLINE'],
+    enum: ['OK', 'LOW', 'EMPTY', 'OFFLINE', 'ON', 'OFF'],
     default: 'OK'
+  },
+  detectionMode: {
+    type: String,
+    enum: ['weight', 'wearable'],
+    default: 'weight'
   },
   wearableMode: {
     type: Boolean,
