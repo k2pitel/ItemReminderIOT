@@ -29,9 +29,7 @@ const Settings = () => {
     phoneNumber: ''
   });
   const [notifications, setNotifications] = useState({
-    email: true,
-    push: true,
-    sms: false
+    email: true
   });
   const [isTracking, setIsTracking] = useState(false);
   const [watchId, setWatchId] = useState(null);
@@ -335,30 +333,6 @@ const Settings = () => {
                   />
                 }
                 label="Email Notifications"
-              />
-            </Box>
-            <Box sx={{ mt: 1 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={notifications.push}
-                    onChange={handleNotificationChange}
-                    name="push"
-                  />
-                }
-                label="Push Notifications"
-              />
-            </Box>
-            <Box sx={{ mt: 1 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={notifications.sms}
-                    onChange={handleNotificationChange}
-                    name="sms"
-                  />
-                }
-                label="SMS Notifications"
               />
             </Box>
             <Button

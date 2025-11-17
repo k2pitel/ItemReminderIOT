@@ -148,12 +148,17 @@ class MqttService {
 
       // Check for alerts
       if (status === 'LOW') {
+        // Use custom alert message if available, otherwise use default
+        const alertMessage = item.customAlertMessage 
+          ? item.customAlertMessage 
+          : `${item.name} is running low (${weight}g)`;
+          
         await alertService.createAlert({
           userId: item.userId,
           itemId: item._id,
           type: 'low_weight',
           severity: 'warning',
-          message: `${item.name} is running low (${weight}g)`,
+          message: alertMessage,
           data: { weight, threshold }
         });
       }

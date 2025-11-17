@@ -63,7 +63,7 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// Check user location
+// Check user location (primary endpoint)
 router.post('/check-location', auth, async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
@@ -81,6 +81,28 @@ router.post('/check-location', auth, async (req, res) => {
   } catch (error) {
     logger.error('Check location error:', error);
     res.status(500).json({ error: 'Failed to check location' });
+  }
+});
+
+// Update user location (alias for convenience)
+router.post('/location', auth, async (req, res) => {
+  try {
+    const { latitude, longitude, accuracy } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: 'Latitude and longitude required' });
+    }
+
+    const results = await geofenceService.updateUserLocation(req.userId, {
+      latitude,
+      longitude,
+      accuracy
+    });
+
+    res.json(results);
+  } catch (error) {
+    logger.error('Update location error:', error);
+    res.status(500).json({ error: 'Failed to update location' });
   }
 });
 

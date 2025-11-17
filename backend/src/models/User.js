@@ -37,13 +37,7 @@ const userSchema = new mongoose.Schema({
     default: 'user'
   },
   notifications: {
-    email: { type: Boolean, default: true },
-    push: { type: Boolean, default: true },
-    sms: { type: Boolean, default: false }
-  },
-  fcmToken: {
-    type: String,
-    default: null
+    email: { type: Boolean, default: true }
   },
   createdAt: {
     type: Date,

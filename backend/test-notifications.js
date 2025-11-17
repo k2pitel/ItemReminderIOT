@@ -8,7 +8,6 @@
  */
 
 require('dotenv').config();
-const axios = require('axios');
 const nodemailer = require('nodemailer');
 
 console.log('\n🧪 ItemReminderIOT - Notification Services Test\n');
@@ -49,77 +48,26 @@ async function testEmail() {
   }
 }
 
-// Test Firebase Configuration
-async function testFirebase() {
-  console.log('\n🔥 Testing Firebase Configuration...');
-  
-  const hasServerKey = !!process.env.FIREBASE_SERVER_KEY;
-  const hasServiceAccount = !!process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  const hasEnvCredentials = !!(process.env.FIREBASE_PROJECT_ID && 
-                                 process.env.FIREBASE_CLIENT_EMAIL && 
-                                 process.env.FIREBASE_PRIVATE_KEY);
-  
-  if (!hasServerKey && !hasServiceAccount && !hasEnvCredentials) {
-    console.log('❌ Firebase not configured');
-    console.log('   Missing: FIREBASE_SERVER_KEY or service account credentials');
-    return false;
-  }
-
-  if (hasServerKey) {
-    console.log('✅ Firebase Server Key found (Legacy)');
-    console.log('   Note: Consider upgrading to Firebase Admin SDK');
-    return true;
-  }
-
-  if (hasServiceAccount) {
-    console.log('✅ Firebase Service Account path configured');
-    try {
-      const path = require('path');
-      const serviceAccountPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
-      require(serviceAccountPath);
-      console.log('✅ Service account file is valid');
-      return true;
-    } catch (error) {
-      console.log('❌ Service account file error:', error.message);
-      return false;
-    }
-  }
-
-  if (hasEnvCredentials) {
-    console.log('✅ Firebase environment credentials configured');
-    return true;
-  }
-
-  return false;
-}
-
-// Test Blynk Configuration
 // Main test function
 async function runTests() {
   const results = {
-    email: await testEmail(),
-    firebase: await testFirebase()
+    email: await testEmail()
   };
 
   console.log('\n' + '='.repeat(50));
   console.log('\n📊 Test Results Summary:\n');
   console.log(`   Email (SMTP):    ${results.email ? '✅ PASS' : '❌ FAIL'}`);
-  console.log(`   Firebase (FCM):  ${results.firebase ? '✅ PASS' : '❌ FAIL'}`);
-
-  const passCount = Object.values(results).filter(r => r).length;
-  const totalCount = Object.keys(results).length;
 
   console.log('\n' + '='.repeat(50));
-  console.log(`\n✨ ${passCount}/${totalCount} notification services configured\n`);
 
-  if (passCount === totalCount) {
-    console.log('🎉 All notification services are ready!\n');
+  if (results.email) {
+    console.log('\n🎉 Email notification service is ready!\n');
+    process.exit(0);
   } else {
-    console.log('⚠️  Some services need configuration.');
-    console.log('   See docs/NOTIFICATION_SETUP.md for setup instructions\n');
+    console.log('\n⚠️  Email service needs configuration.');
+    console.log('   Check your .env file for SMTP settings\n');
+    process.exit(1);
   }
-
-  process.exit(passCount === totalCount ? 0 : 1);
 }
 
 // Run the tests

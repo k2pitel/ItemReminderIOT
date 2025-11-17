@@ -1,8 +1,6 @@
-const axios = require('axios');
 const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const logger = require('../utils/logger');
-const firebaseService = require('./firebaseService');
 
 class NotificationService {
   constructor() {
@@ -43,27 +41,14 @@ class NotificationService {
 
       // Always log notification for testing
       logger.info(`🚨 ALERT TRIGGERED: ${alert.message}`);
-      logger.info(`📱 Notification would be sent to user: ${user.email || user.username || user._id}`);
+      logger.info(`� Email notification will be sent to: ${user.email || user.username || user._id}`);
       
-      const promises = [];
-
-      // Send Firebase notification if configured
-      if (firebaseService.isInitialized() && user.fcmToken) {
-        promises.push(this.sendFirebaseNotification(alert, user));
-      } else if (!firebaseService.isInitialized()) {
-        logger.info('🔥 Firebase notification: Configure Firebase credentials in .env to enable');
-      } else if (!user.fcmToken) {
-        logger.info('🔥 Firebase notification: User has no FCM token registered');
-      }
-
       // Send email notification if enabled
       if (user.notifications && user.notifications.email) {
-        promises.push(this.sendEmailNotification(alert, user));
+        await this.sendEmailNotification(alert, user);
       } else {
         logger.info('📧 Email notification: User has not enabled email notifications');
       }
-
-      await Promise.allSettled(promises);
     } catch (error) {
       logger.error('Error sending notification:', error);
     }
