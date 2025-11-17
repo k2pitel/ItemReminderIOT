@@ -2,6 +2,7 @@ const axios = require('axios');
 const nodemailer = require('nodemailer');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const firebaseService = require('./firebaseService');
 
 class NotificationService {
   constructor() {
@@ -46,18 +47,13 @@ class NotificationService {
       
       const promises = [];
 
-      // Send Blynk notification if configured
-      if (process.env.BLYNK_TOKEN) {
-        promises.push(this.sendBlynkNotification(alert, user));
-      } else {
-        logger.info('📲 Blynk notification: Configure BLYNK_TOKEN in .env to enable');
-      }
-
       // Send Firebase notification if configured
-      if (process.env.FIREBASE_SERVER_KEY) {
+      if (firebaseService.isInitialized() && user.fcmToken) {
         promises.push(this.sendFirebaseNotification(alert, user));
-      } else {
-        logger.info('🔥 Firebase notification: Configure FIREBASE_SERVER_KEY in .env to enable');
+      } else if (!firebaseService.isInitialized()) {
+        logger.info('🔥 Firebase notification: Configure Firebase credentials in .env to enable');
+      } else if (!user.fcmToken) {
+        logger.info('🔥 Firebase notification: User has no FCM token registered');
       }
 
       // Send email notification if enabled
@@ -73,53 +69,64 @@ class NotificationService {
     }
   }
 
-  async sendBlynkNotification(alert, user) {
-    try {
-      const url = `https://blynk.cloud/external/api/notification`;
-      await axios.post(url, {
-        token: process.env.BLYNK_TOKEN,
-        body: alert.message
-      });
-      logger.info('Blynk notification sent');
-    } catch (error) {
-      logger.error('Blynk notification error:', error.message);
-    }
-  }
-
   async sendFirebaseNotification(alert, user) {
     try {
-      // This would require user's FCM token stored in user model
-      // Placeholder implementation
-      const url = 'https://fcm.googleapis.com/fcm/send';
-      const headers = {
-        'Authorization': `key=${process.env.FIREBASE_SERVER_KEY}`,
-        'Content-Type': 'application/json'
-      };
-
-      // In production, you'd get this from user.fcmToken
-      const fcmToken = user.fcmToken || '';
-
-      if (!fcmToken) {
+      if (!user.fcmToken) {
         logger.warn('No FCM token for user:', user._id);
         return;
       }
 
-      await axios.post(url, {
-        to: fcmToken,
-        notification: {
-          title: 'Item Reminder Alert',
-          body: alert.message,
-          priority: 'high'
-        },
-        data: {
-          alertId: alert._id.toString(),
-          type: alert.type
-        }
-      }, { headers });
+      // Determine notification title and body based on alert type
+      let title, body, icon;
+      
+      switch (alert.type) {
+        case 'low_weight':
+          title = '⚠️ Low Stock Alert';
+          icon = '/icons/alert-warning.png';
+          break;
+        case 'geofence':
+          title = '📍 Geofence Alert';
+          icon = '/icons/alert-location.png';
+          break;
+        case 'offline':
+          title = '🔴 Device Offline';
+          icon = '/icons/alert-offline.png';
+          break;
+        default:
+          title = '🔔 Item Reminder Alert';
+          icon = '/icons/alert-default.png';
+      }
 
-      logger.info('Firebase notification sent');
+      body = alert.message;
+
+      const notification = {
+        title: title,
+        body: body,
+        icon: icon
+      };
+
+      const data = {
+        alertId: alert._id.toString(),
+        type: alert.type,
+        severity: alert.severity,
+        timestamp: (alert.createdAt || new Date()).toISOString()
+      };
+
+      // Use the new Firebase service
+      const result = await firebaseService.sendNotification(user.fcmToken, notification, data);
+      
+      if (result.success) {
+        logger.info(`🔥 Firebase notification sent to ${user.username || user.email}`);
+      }
     } catch (error) {
-      logger.error('Firebase notification error:', error.message);
+      // Handle invalid token error
+      if (error.message === 'INVALID_TOKEN') {
+        logger.warn(`Invalid FCM token for user ${user._id}, clearing token`);
+        // Clear the invalid token from user record
+        await User.findByIdAndUpdate(user._id, { fcmToken: null });
+      } else {
+        logger.error('Firebase notification error:', error.message);
+      }
     }
   }
 

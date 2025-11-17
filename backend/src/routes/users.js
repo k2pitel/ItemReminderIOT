@@ -63,4 +63,52 @@ router.put('/me/notifications', auth, async (req, res) => {
   }
 });
 
+// Register FCM token for push notifications
+router.post('/me/fcm-token', auth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'FCM token is required' });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { fcmToken: token },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    logger.info(`FCM token registered for user: ${user.username}`);
+    res.json({ message: 'FCM token registered successfully', user });
+  } catch (error) {
+    logger.error('Register FCM token error:', error);
+    res.status(500).json({ error: 'Failed to register FCM token' });
+  }
+});
+
+// Remove FCM token (logout from push notifications)
+router.delete('/me/fcm-token', auth, async (req, res) => {
+  try {
+    const user = await User.findByIdAndUpdate(
+      req.userId,
+      { fcmToken: null },
+      { new: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    logger.info(`FCM token removed for user: ${user.username}`);
+    res.json({ message: 'FCM token removed successfully', user });
+  } catch (error) {
+    logger.error('Remove FCM token error:', error);
+    res.status(500).json({ error: 'Failed to remove FCM token' });
+  }
+});
+
 module.exports = router;

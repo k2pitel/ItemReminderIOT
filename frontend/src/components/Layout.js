@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Box,
@@ -9,7 +9,6 @@ import {
   Grid,
   Card,
   CardContent,
-  Chip,
   IconButton,
   Drawer,
   List,
@@ -47,9 +46,60 @@ const Layout = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const calculateStats = useCallback((itemsList) => {
+    const newStats = {
+      total: itemsList.length,
+      ok: 0,
+      low: 0,
+      offline: 0
+    };
+
+    itemsList.forEach(item => {
+      if (item.status === 'OK') newStats.ok++;
+      else if (item.status === 'LOW' || item.status === 'EMPTY') newStats.low++;
+      else if (item.status === 'OFFLINE') newStats.offline++;
+    });
+
+    setStats(newStats);
+  }, []);
+
+  const fetchItems = useCallback(async () => {
+    try {
+      const response = await api.get('/items');
+      setItems(response.data);
+      calculateStats(response.data);
+    } catch (error) {
+      console.error('Error fetching items:', error);
+    }
+  }, [calculateStats]);
+
+  const handleWeightUpdate = useCallback((data) => {
+    setItems(prevItems => {
+      const newItems = prevItems.map(item =>
+        item._id === data.itemId
+          ? { ...item, currentWeight: data.weight, status: data.status }
+          : item
+      );
+      calculateStats(newItems);
+      return newItems;
+    });
+  }, [calculateStats]);
+
+  const handleStatusUpdate = useCallback((data) => {
+    setItems(prevItems => {
+      const newItems = prevItems.map(item =>
+        item._id === data.itemId
+          ? { ...item, status: data.status }
+          : item
+      );
+      calculateStats(newItems);
+      return newItems;
+    });
+  }, [calculateStats]);
+
   useEffect(() => {
     fetchItems();
-  }, []);
+  }, [fetchItems]);
 
   useEffect(() => {
     if (socket) {
@@ -61,58 +111,7 @@ const Layout = ({ children }) => {
         socket.off('status_update');
       };
     }
-  }, [socket]);
-
-  const fetchItems = async () => {
-    try {
-      const response = await api.get('/items');
-      setItems(response.data);
-      calculateStats(response.data);
-    } catch (error) {
-      console.error('Error fetching items:', error);
-    }
-  };
-
-  const calculateStats = (itemsList) => {
-    const stats = {
-      total: itemsList.length,
-      ok: 0,
-      low: 0,
-      offline: 0
-    };
-
-    itemsList.forEach(item => {
-      if (item.status === 'OK') stats.ok++;
-      else if (item.status === 'LOW' || item.status === 'EMPTY') stats.low++;
-      else if (item.status === 'OFFLINE') stats.offline++;
-    });
-
-    setStats(stats);
-  };
-
-  const handleWeightUpdate = (data) => {
-    setItems(prevItems => {
-      const newItems = prevItems.map(item =>
-        item._id === data.itemId
-          ? { ...item, currentWeight: data.weight, status: data.status }
-          : item
-      );
-      calculateStats(newItems);
-      return newItems;
-    });
-  };
-
-  const handleStatusUpdate = (data) => {
-    setItems(prevItems => {
-      const newItems = prevItems.map(item =>
-        item._id === data.itemId
-          ? { ...item, status: data.status }
-          : item
-      );
-      calculateStats(newItems);
-      return newItems;
-    });
-  };
+  }, [socket, handleWeightUpdate, handleStatusUpdate]);
 
   const handleLogout = () => {
     logout();

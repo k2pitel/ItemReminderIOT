@@ -41,6 +41,10 @@ const userSchema = new mongoose.Schema({
     push: { type: Boolean, default: true },
     sms: { type: Boolean, default: false }
   },
+  fcmToken: {
+    type: String,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
