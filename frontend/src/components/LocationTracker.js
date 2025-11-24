@@ -29,8 +29,12 @@ const LocationTracker = () => {
   const [accuracy, setAccuracy] = useState(null);
 
   useEffect(() => {
-    if (!socket || !user) return;
+    if (!socket || !user) {
+      console.log('LocationTracker: Missing socket or user', { socket: !!socket, user: !!user });
+      return;
+    }
 
+    console.log('LocationTracker: Authenticating socket for user', user.id);
     // Authenticate socket for location tracking
     socket.emit('authenticate', { userId: user.id });
 
@@ -61,16 +65,21 @@ const LocationTracker = () => {
   }, [socket, user]);
 
   const startTracking = async () => {
+    console.log('LocationTracker: Starting tracking...');
+    
     if (!navigator.geolocation) {
+      console.error('LocationTracker: Geolocation not supported');
       setError('Geolocation is not supported by this browser');
       return;
     }
 
     // Request notification permission
     if (Notification.permission === 'default') {
+      console.log('LocationTracker: Requesting notification permission...');
       await Notification.requestPermission();
     }
 
+    console.log('LocationTracker: Socket connected?', !!socket);
     setError(null);
     setIsTracking(true);
 
@@ -84,17 +93,21 @@ const LocationTracker = () => {
       (position) => {
         const { latitude, longitude, accuracy } = position.coords;
         
+        console.log('LocationTracker: Got location', { latitude, longitude, accuracy });
         setCurrentLocation({ latitude, longitude });
         setAccuracy(accuracy);
         
         // Send location to backend
         if (socket) {
+          console.log('LocationTracker: Sending location to backend');
           socket.emit('location-update', {
             latitude,
             longitude,
             accuracy,
             timestamp: new Date().toISOString()
           });
+        } else {
+          console.warn('LocationTracker: No socket connection to send location');
         }
       },
       (error) => {
