@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -30,16 +30,6 @@ const Analytics = () => {
   const [period, setPeriod] = useState('7d');
   const [analytics, setAnalytics] = useState(null);
 
-  useEffect(() => {
-    fetchItems();
-  }, []);
-
-  useEffect(() => {
-    if (selectedItem) {
-      fetchAnalytics();
-    }
-  }, [selectedItem, period]);
-
   const fetchItems = async () => {
     try {
       const response = await api.get('/items');
@@ -52,7 +42,7 @@ const Analytics = () => {
     }
   };
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     try {
       const response = await api.get(`/readings/analytics/${selectedItem}`, {
         params: { period }
@@ -61,7 +51,17 @@ const Analytics = () => {
     } catch (error) {
       console.error('Error fetching analytics:', error);
     }
-  };
+  }, [selectedItem, period]);
+
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
+  useEffect(() => {
+    if (selectedItem) {
+      fetchAnalytics();
+    }
+  }, [selectedItem, period, fetchAnalytics]);
 
   if (!selectedItem) {
     return (

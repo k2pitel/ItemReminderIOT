@@ -1,5 +1,5 @@
 /*
- * ESP32 Item Reminder - Weight Sensor with Load Cell (HX711)
+ * ESP32-C3 (XIAO ESP32C3) Item Reminder - Weight Sensor with Load Cell (HX711)
  * 
  * This firmware reads weight from a load cell using HX711 amplifier
  * and publishes data to MQTT broker for real-time monitoring.
@@ -9,18 +9,21 @@
  * - MQTT communication with backend
  * - Low weight detection and status reporting
  * - WiFi connection with auto-reconnect
- * - OTA updates support (optional)
+ * - Optimized for ESP32-C3 (single-core RISC-V)
  * 
  * Hardware:
- * - ESP32 Dev Board
+ * - Seeed XIAO ESP32C3 (or any ESP32-C3 board)
  * - HX711 Load Cell Amplifier
  * - Load Cell (1kg - 5kg recommended)
  * 
- * Wiring:
- * HX711 DT  -> GPIO 16 (configurable)
- * HX711 SCK -> GPIO 17 (configurable)
+ * Wiring for XIAO ESP32C3:
+ * HX711 DT  -> GPIO 2 (D0)
+ * HX711 SCK -> GPIO 3 (D1)
  * HX711 VCC -> 3.3V
  * HX711 GND -> GND
+ * 
+ * Note: ESP32-C3 is a single-core RISC-V processor with limited GPIO pins.
+ * Avoid using GPIO 18 and 19 (USB Serial) if you need USB debugging.
  */
 
 #include <WiFi.h>
@@ -35,18 +38,18 @@ const char* ssid = "YOUR_WIFI_SSID";          // Replace with your WiFi SSID
 const char* password = "YOUR_WIFI_PASSWORD";   // Replace with your WiFi password
 
 // MQTT Configuration
-const char* mqtt_server = "YOUR_MQTT_BROKER_IP";  // Replace with your MQTT broker IP (e.g., "192.168.1.100")
+const char* mqtt_server = "10.133.56.122";    // Your computer's IP address (MQTT broker)
 const int mqtt_port = 1883;
-const char* mqtt_user = "";                    // Leave empty if no authentication
-const char* mqtt_password = "";                // Leave empty if no authentication
+const char* mqtt_user = "";                    // No authentication needed
+const char* mqtt_password = "";                // No authentication needed
 
 // Device Configuration - MUST MATCH THE DEVICE ID IN YOUR WEB APP
 const char* device_id = "ESP32_001";          // IMPORTANT: This must match the Item's Device ID in the web app
 const char* item_name = "Pills";               // Item name (for logging only)
 
-// HX711 Load Cell Pins
-const int HX711_DT = 16;   // Data pin
-const int HX711_SCK = 17;  // Clock pin
+// HX711 Load Cell Pins (ESP32-C3 compatible)
+const int HX711_DT = 2;    // GPIO 2 (D0 on XIAO ESP32C3)
+const int HX711_SCK = 3;   // GPIO 3 (D1 on XIAO ESP32C3)
 
 // Calibration
 float calibration_factor = -7050; // Adjust this value during calibration
@@ -318,12 +321,17 @@ void setup() {
   
   Serial.println("\n\n");
   Serial.println("╔════════════════════════════════════╗");
-  Serial.println("║   ESP32 Item Reminder System      ║");
-  Serial.println("║   Version 2.0 - With HX711         ║");
+  Serial.println("║  ESP32-C3 Item Reminder System    ║");
+  Serial.println("║  Version 2.0 - XIAO ESP32C3        ║");
   Serial.println("╚════════════════════════════════════╝");
   
   // Initialize HX711
   Serial.println("\n🔧 Initializing HX711 Load Cell...");
+  Serial.print("   DT Pin:  GPIO ");
+  Serial.println(HX711_DT);
+  Serial.print("   SCK Pin: GPIO ");
+  Serial.println(HX711_SCK);
+  
   scale.begin(HX711_DT, HX711_SCK);
   
   if (scale.is_ready()) {

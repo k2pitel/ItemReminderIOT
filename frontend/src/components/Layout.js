@@ -34,7 +34,6 @@ import api from '../services/api';
 
 const Layout = ({ children }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [items, setItems] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
     ok: 0,
@@ -66,7 +65,6 @@ const Layout = ({ children }) => {
   const fetchItems = useCallback(async () => {
     try {
       const response = await api.get('/items');
-      setItems(response.data);
       calculateStats(response.data);
     } catch (error) {
       console.error('Error fetching items:', error);
@@ -74,28 +72,14 @@ const Layout = ({ children }) => {
   }, [calculateStats]);
 
   const handleWeightUpdate = useCallback((data) => {
-    setItems(prevItems => {
-      const newItems = prevItems.map(item =>
-        item._id === data.itemId
-          ? { ...item, currentWeight: data.weight, status: data.status }
-          : item
-      );
-      calculateStats(newItems);
-      return newItems;
-    });
-  }, [calculateStats]);
+    // Refetch items to update stats when weight changes
+    fetchItems();
+  }, [fetchItems]);
 
   const handleStatusUpdate = useCallback((data) => {
-    setItems(prevItems => {
-      const newItems = prevItems.map(item =>
-        item._id === data.itemId
-          ? { ...item, status: data.status }
-          : item
-      );
-      calculateStats(newItems);
-      return newItems;
-    });
-  }, [calculateStats]);
+    // Refetch items to update stats when status changes
+    fetchItems();
+  }, [fetchItems]);
 
   useEffect(() => {
     fetchItems();

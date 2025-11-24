@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -71,44 +71,7 @@ const Map = () => {
   const [mapCenter, setMapCenter] = useState([55.8826, 9.8431]); // Default center
   const [mapZoom, setMapZoom] = useState(13);
 
-  useEffect(() => {
-    fetchGeofences();
-    
-    // Check if tracking was previously enabled
-    const savedTracking = localStorage.getItem('locationTrackingEnabled') === 'true';
-    if (savedTracking) {
-      setIsTracking(true);
-      startTracking();
-    }
-    
-    // Request notification permission
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!socket || !user) return;
-
-    // Authenticate socket
-    socket.emit('authenticate', { userId: user.id });
-
-    // Listen for geofence alerts
-    socket.on('geofence-alert', (alert) => {
-      if (Notification.permission === 'granted') {
-        new Notification(alert.message, {
-          icon: '/favicon.ico',
-          tag: `geofence-${alert.geofenceName}`
-        });
-      }
-    });
-
-    return () => {
-      socket.off('geofence-alert');
-    };
-  }, [socket, user]);
-
-  const fetchGeofences = async () => {
+  const fetchGeofences = useCallback(async () => {
     try {
       const response = await api.get('/geofence');
       setGeofences(response.data);
@@ -121,9 +84,9 @@ const Map = () => {
     } catch (error) {
       console.error('Error fetching geofences:', error);
     }
-  };
+  }, [userLocation]);
 
-  const startTracking = () => {
+  const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by this browser');
       return;
@@ -164,7 +127,44 @@ const Map = () => {
     );
 
     setWatchId(id);
-  };
+  }, [socket]);
+
+  useEffect(() => {
+    fetchGeofences();
+    
+    // Check if tracking was previously enabled
+    const savedTracking = localStorage.getItem('locationTrackingEnabled') === 'true';
+    if (savedTracking) {
+      setIsTracking(true);
+      startTracking();
+    }
+    
+    // Request notification permission
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [fetchGeofences, startTracking]);
+
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    // Authenticate socket
+    socket.emit('authenticate', { userId: user.id });
+
+    // Listen for geofence alerts
+    socket.on('geofence-alert', (alert) => {
+      if (Notification.permission === 'granted') {
+        new Notification(alert.message, {
+          icon: '/favicon.ico',
+          tag: `geofence-${alert.geofenceName}`
+        });
+      }
+    });
+
+    return () => {
+      socket.off('geofence-alert');
+    };
+  }, [socket, user]);
 
   const stopTracking = () => {
     if (watchId) {
