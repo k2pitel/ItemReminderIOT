@@ -2,6 +2,7 @@ const express = require('express');
 const Item = require('../models/Item');
 const { auth } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const mqttService = require('../services/mqttService');
 
 const router = express.Router();
 
@@ -59,6 +60,18 @@ router.put('/:id', auth, async (req, res) => {
 
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
+    }
+
+    // Propagate important changes back to the device via MQTT command channel
+    const commandPayload = {};
+    if (req.body.thresholdWeight !== undefined) {
+      commandPayload.threshold = item.thresholdWeight;
+    }
+    if (req.body.tare === true) {
+      commandPayload.tare = true;
+    }
+    if (Object.keys(commandPayload).length > 0) {
+      mqttService.publishCommand(item.deviceId, commandPayload);
     }
 
     res.json(item);

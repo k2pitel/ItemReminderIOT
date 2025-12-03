@@ -11,18 +11,21 @@ const axios = require('axios');
 
 const config = {
   apiUrl: 'http://localhost:5000/api',
-  mqttBroker: 'mqtt://localhost:1883'
+  mqttBroker: 'mqtt://localhost:1883',
+  deviceId: 'ESP32_001'
 };
+
+const telemetryTopic = `itemreminder/devices/${config.deviceId}/weight`;
 
 let authToken = null;
 let userId = null;
 
-console.log('\n🧪 Complete MQTT → Email Notification Test\n');
+console.log('\nComplete MQTT + Email Notification Test');
 console.log('='.repeat(60));
 
 // Step 1: Create/Login User
 async function setupUser() {
-  console.log('\n📝 Step 1: Setting up test user...');
+  console.log('\nStep 1: Setting up test user...');
   
   try {
     // Try login first
@@ -33,7 +36,7 @@ async function setupUser() {
     
     authToken = loginResponse.data.token;
     userId = loginResponse.data.user.id;
-    console.log('✅ Logged in as existing user');
+    console.log('Logged in as existing user');
     console.log(`   User ID: ${userId}`);
     
   } catch (error) {
@@ -49,12 +52,12 @@ async function setupUser() {
       
       authToken = registerResponse.data.token;
       userId = registerResponse.data.user.id;
-      console.log('✅ New user created');
+      console.log('New user created');
       console.log(`   User ID: ${userId}`);
       console.log(`   Email: ${registerResponse.data.user.email}`);
       
     } catch (regError) {
-      console.error('❌ Failed to create user:', regError.response?.data || regError.message);
+      console.error('Failed to create user:', regError.response?.data || regError.message);
       throw regError;
     }
   }
@@ -62,7 +65,7 @@ async function setupUser() {
 
 // Step 2: Create Item
 async function setupItem() {
-  console.log('\n📦 Step 2: Creating item...');
+  console.log('\nStep 2: Creating item...');
   
   try {
     // First, check if item already exists
@@ -71,10 +74,10 @@ async function setupItem() {
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
     
-    const existingItem = existingItems.data.find(item => item.deviceId === 'ESP32_001');
+    const existingItem = existingItems.data.find(item => item.deviceId === config.deviceId);
     
     if (existingItem) {
-      console.log('✅ Item already exists');
+      console.log('Item already exists');
       console.log(`   ID: ${existingItem._id}`);
       console.log(`   Name: ${existingItem.name}`);
       console.log(`   Device ID: ${existingItem.deviceId}`);
@@ -84,7 +87,7 @@ async function setupItem() {
     
     // Create new item
     const itemData = {
-      deviceId: 'ESP32_001',
+      deviceId: config.deviceId,
       name: 'Coffee',
       description: 'Test coffee container',
       thresholdWeight: 50,
@@ -98,7 +101,7 @@ async function setupItem() {
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
     
-    console.log('✅ Item created successfully');
+    console.log('Item created successfully');
     console.log(`   ID: ${response.data._id}`);
     console.log(`   Name: ${response.data.name}`);
     console.log(`   Device ID: ${response.data.deviceId}`);
@@ -107,23 +110,23 @@ async function setupItem() {
     return response.data;
     
   } catch (error) {
-    console.error('❌ Failed to create item:', error.response?.data || error.message);
+    console.error('Failed to create item:', error.response?.data || error.message);
     throw error;
   }
 }
 
 // Step 3: Send MQTT Message
 async function sendMqttMessage() {
-  console.log('\n📡 Step 3: Sending MQTT message...');
+  console.log('\nStep 3: Sending MQTT message...');
   
   return new Promise((resolve, reject) => {
     const client = mqtt.connect(config.mqttBroker);
     
     client.on('connect', () => {
-      console.log('✅ Connected to MQTT broker');
+      console.log('Connected to MQTT broker');
       
       const message = {
-        device_id: 'ESP32_001',
+        device_id: config.deviceId,
         item_name: 'Coffee',
         weight: 15,
         threshold: 50,
@@ -131,19 +134,19 @@ async function sendMqttMessage() {
         wifi_rssi: -45
       };
       
-      console.log('📤 Publishing message to itemreminder/weight');
+      console.log(`Publishing message to ${telemetryTopic}`);
       console.log(`   Device: ${message.device_id}`);
       console.log(`   Weight: ${message.weight}g (Threshold: ${message.threshold}g)`);
       console.log(`   Status: ${message.status}`);
       
-      client.publish('itemreminder/weight', JSON.stringify(message), (err) => {
+      client.publish(telemetryTopic, JSON.stringify(message), (err) => {
         if (err) {
-          console.error('❌ Failed to publish:', err.message);
+          console.error('Failed to publish:', err.message);
           client.end();
           reject(err);
         } else {
-          console.log('✅ MQTT message published');
-          console.log('⏳ Waiting 3 seconds for backend to process...');
+          console.log('MQTT message published');
+          console.log('Waiting 3 seconds for backend to process...');
           
           setTimeout(() => {
             client.end();
@@ -154,7 +157,7 @@ async function sendMqttMessage() {
     });
     
     client.on('error', (err) => {
-      console.error('❌ MQTT error:', err.message);
+      console.error('MQTT error:', err.message);
       reject(err);
     });
   });
@@ -162,7 +165,7 @@ async function sendMqttMessage() {
 
 // Step 4: Check Alerts
 async function checkAlerts() {
-  console.log('\n📬 Step 4: Checking for generated alerts...');
+  console.log('\nStep 4: Checking for generated alerts...');
   
   try {
     const response = await axios.get(
@@ -171,11 +174,11 @@ async function checkAlerts() {
     );
     
     const alerts = response.data;
-    console.log(`✅ Found ${alerts.length} alert(s) in database`);
+    console.log(`Found ${alerts.length} alert(s) in database`);
     
     if (alerts.length > 0) {
       const recentAlert = alerts[0];
-      console.log('\n📋 Most Recent Alert:');
+      console.log('\nMost Recent Alert:');
       console.log(`   Type: ${recentAlert.type}`);
       console.log(`   Severity: ${recentAlert.severity}`);
       console.log(`   Message: ${recentAlert.message}`);
@@ -183,15 +186,15 @@ async function checkAlerts() {
     }
     
   } catch (error) {
-    console.error('❌ Failed to fetch alerts:', error.response?.data || error.message);
+    console.error('Failed to fetch alerts:', error.response?.data || error.message);
   }
 }
 
 // Main execution
 async function runTest() {
   try {
-    console.log('🚀 Starting complete MQTT + Email test...\n');
-    console.log('⚠️  Make sure backend is running: npm run dev\n');
+    console.log('Starting complete MQTT + Email test...\n');
+    console.log('Make sure backend is running: npm run dev\n');
     
     await setupUser();
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -205,13 +208,13 @@ async function runTest() {
     await checkAlerts();
     
     console.log('\n' + '='.repeat(60));
-    console.log('\n✅ TEST COMPLETED!');
-    console.log('\n📧 Expected Email:');
+    console.log('\nTEST COMPLETED!');
+    console.log('\nExpected Email (if SMTP configured):');
     console.log(`   To: ${process.env.SMTP_USER || 'your-email@gmail.com'}`);
-    console.log('   Subject: ⚠️ Low Stock Alert - Item Running Low');
+    console.log('   Subject: Low Stock Alert - Item Running Low');
     console.log('   Body: Coffee is running low (15g / 50g threshold)');
-    console.log('\n💡 Actions:');
-    console.log('   1. Check your Gmail inbox (and spam folder)');
+    console.log('\nActions:');
+    console.log('   1. Check your email inbox (and spam folder)');
     console.log('   2. Check backend terminal for processing logs');
     console.log('   3. Check frontend alerts: http://localhost:3000/alerts');
     console.log('\n' + '='.repeat(60) + '\n');
@@ -219,8 +222,8 @@ async function runTest() {
     process.exit(0);
     
   } catch (error) {
-    console.error('\n❌ TEST FAILED:', error.message);
-    console.error('\n💡 Troubleshooting:');
+    console.error('\nTEST FAILED:', error.message);
+    console.error('\nTroubleshooting:');
     console.error('   1. Ensure backend is running: npm run dev');
     console.error('   2. Ensure MongoDB is running');
     console.error('   3. Ensure MQTT broker is running');

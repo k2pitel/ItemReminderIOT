@@ -1,12 +1,13 @@
 const mqtt = require('mqtt');
 
-console.log('\n📡 MQTT Weight Message Test\n');
+console.log('\nMQTT Weight Message Test\n');
 console.log('='.repeat(50));
 
+const telemetryTopic = 'itemreminder/devices/ESP32_001/weight';
 const client = mqtt.connect('mqtt://localhost:1883');
 
 client.on('connect', () => {
-  console.log('✅ Connected to MQTT broker at localhost:1883');
+  console.log('Connected to MQTT broker at localhost:1883');
   
   const message = {
     device_id: 'ESP32_001',
@@ -17,7 +18,7 @@ client.on('connect', () => {
     wifi_rssi: -45
   };
   
-  console.log('\n📤 Publishing weight message to topic: itemreminder/weight');
+  console.log(`\nPublishing weight message to topic: ${telemetryTopic}`);
   console.log('   Device ID:', message.device_id);
   console.log('   Item:', message.item_name);
   console.log('   Weight:', message.weight + 'g');
@@ -25,21 +26,19 @@ client.on('connect', () => {
   console.log('   Status:', message.status);
   console.log('   WiFi Signal:', message.wifi_rssi + 'dBm');
   
-  client.publish('itemreminder/weight', JSON.stringify(message), (err) => {
+  client.publish(telemetryTopic, JSON.stringify(message), (err) => {
     if (err) {
-      console.error('\n❌ Failed to publish message:', err.message);
+      console.error('\nFailed to publish message:', err.message);
       process.exit(1);
     } else {
-      console.log('\n✅ MQTT message sent successfully!');
-      console.log('\n📋 What should happen now:');
+      console.log('\nMQTT message sent successfully!');
+      console.log('\nExpected behavior:');
       console.log('   1. Backend receives the message');
       console.log('   2. Item weight is updated to 15g');
       console.log('   3. Low weight alert is created (15g < 50g)');
-      console.log('   4. Email notification is sent');
-      console.log('\n📧 Check your email: kevin245312@gmail.com');
-      console.log('   Subject: ⚠️ Low Stock Alert - Item Running Low\n');
-      console.log('💡 Check backend terminal for processing logs');
-      console.log('🌐 Check frontend: http://localhost:3000/alerts\n');
+      console.log('   4. Email notification is sent (if configured)');
+      console.log('\nCheck backend terminal for processing logs');
+      console.log('Check frontend: http://localhost:3000/alerts\n');
       console.log('='.repeat(50));
     }
     client.end();
@@ -48,7 +47,7 @@ client.on('connect', () => {
 });
 
 client.on('error', (err) => {
-  console.error('\n❌ MQTT Connection Error:', err.message);
+  console.error('\nMQTT Connection Error:', err.message);
   console.error('\nTroubleshooting:');
   console.error('  1. Ensure MQTT broker is running:');
   console.error('     docker ps | Select-String mosquitto');

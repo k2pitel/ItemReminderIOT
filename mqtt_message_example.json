@@ -1,5 +1,5 @@
 {
-  "topic": "itemreminder/weight",
+  "topic": "itemreminder/devices/ESP32_001/weight",
   "message": {
     "device_id": "ESP32_001",
     "item_name": "Coffee",

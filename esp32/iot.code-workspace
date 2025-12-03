@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "iot",
+			"path": "."
+		},
+		{
+			"name": "ItemReminderIOT",
+			"path": "../../../Skole/IOT/ItemReminderIOT"
+		}
+	],
+	"settings": {}
+}

@@ -9,6 +9,12 @@ class MqttService {
   constructor() {
     this.client = null;
     this.io = null;
+    this.topics = {
+      telemetry: 'itemreminder/devices/+/weight',
+      status: 'itemreminder/devices/+/status',
+      legacyTelemetry: 'itemreminder/weight',
+      legacyStatus: 'itemreminder/status'
+    };
   }
 
   start(io) {
@@ -27,13 +33,22 @@ class MqttService {
     this.client.on('connect', () => {
       logger.info('MQTT connected to broker:', broker);
       
-      // Subscribe to topics
-      this.client.subscribe('itemreminder/weight', (err) => {
-        if (err) logger.error('MQTT subscribe error:', err);
-      });
-      
-      this.client.subscribe('itemreminder/status', (err) => {
-        if (err) logger.error('MQTT subscribe error:', err);
+      // Subscribe to per-device topics and keep legacy topics for compatibility
+      const topicsToSubscribe = [
+        this.topics.telemetry,
+        this.topics.status,
+        this.topics.legacyTelemetry,
+        this.topics.legacyStatus
+      ];
+
+      topicsToSubscribe.forEach((topic) => {
+        this.client.subscribe(topic, (err) => {
+          if (err) {
+            logger.error(`MQTT subscribe error for ${topic}:`, err);
+          } else {
+            logger.info(`MQTT subscribed to ${topic}`);
+          }
+        });
       });
     });
 
@@ -43,12 +58,20 @@ class MqttService {
         logger.info(`Raw MQTT message on ${topic}: "${messageString}"`);
         
         const data = JSON.parse(messageString);
-        logger.info(`MQTT message received on ${topic}:`, data);
+        const { type, deviceIdFromTopic } = this.parseTopic(topic);
+        const normalizedData = this.normalizePayload(type, data, deviceIdFromTopic);
 
-        if (topic === 'itemreminder/weight') {
-          await this.handleWeightData(data);
-        } else if (topic === 'itemreminder/status') {
-          await this.handleStatusData(data);
+        if (!type || !normalizedData) {
+          logger.warn(`MQTT message on ${topic} ignored: could not resolve type/device_id`);
+          return;
+        }
+
+        logger.info(`MQTT message received on ${topic}:`, normalizedData);
+
+        if (type === 'weight') {
+          await this.handleWeightData(normalizedData);
+        } else if (type === 'status') {
+          await this.handleStatusData(normalizedData);
         }
       } catch (error) {
         logger.error('Error processing MQTT message:', error);
@@ -69,6 +92,48 @@ class MqttService {
     });
   }
 
+  parseTopic(topic) {
+    const parts = topic.split('/');
+
+    // itemreminder/devices/{deviceId}/{type}
+    if (parts.length >= 4 && parts[0] === 'itemreminder' && parts[1] === 'devices') {
+      const deviceId = parts[2];
+      const type = parts[3] === 'weight' ? 'weight' : parts[3] === 'status' ? 'status' : null;
+      return { type, deviceIdFromTopic: deviceId };
+    }
+
+    if (topic === 'itemreminder/weight') {
+      return { type: 'weight', deviceIdFromTopic: null };
+    }
+
+    if (topic === 'itemreminder/status') {
+      return { type: 'status', deviceIdFromTopic: null };
+    }
+
+    return { type: null, deviceIdFromTopic: null };
+  }
+
+  normalizePayload(type, data, deviceIdFromTopic) {
+    if (!type) {
+      return null;
+    }
+
+    const normalized = { ...data };
+    if (!normalized.device_id && normalized.deviceId) {
+      normalized.device_id = normalized.deviceId;
+    }
+    if (!normalized.device_id && deviceIdFromTopic) {
+      normalized.device_id = deviceIdFromTopic;
+    }
+
+    if (!normalized.device_id) {
+      logger.warn(`MQTT ${type} payload missing device_id. Topic device fallback: ${deviceIdFromTopic || 'none'}`);
+      return null;
+    }
+
+    return normalized;
+  }
+
   async handleWeightData(data) {
     const { device_id, item_name, weight, threshold, status, wifi_rssi, wear_status } = data;
 
@@ -81,9 +146,12 @@ class MqttService {
         return;
       }
 
+      const thresholdValue = typeof threshold === 'number' ? threshold : item.thresholdWeight;
+      const statusValue = status || item.status;
+
       // Update basic data
       item.currentWeight = weight;
-      item.thresholdWeight = threshold;
+      item.thresholdWeight = thresholdValue;
       item.lastReading = new Date();
       
       // Handle detection mode and status
@@ -108,7 +176,7 @@ class MqttService {
         }
         
         // For weight mode, use the status from sensor (LOW/OK/EMPTY)
-        item.status = status;
+        item.status = statusValue;
         item.wearStatus = 'N/A';
       }
       
@@ -127,8 +195,8 @@ class MqttService {
         itemId: item._id,
         deviceId: device_id,
         weight,
-        threshold,
-        status,
+        threshold: thresholdValue,
+        status: statusValue,
         wifiRssi: wifi_rssi
       });
       await reading.save();
@@ -139,7 +207,7 @@ class MqttService {
           itemId: item._id,
           deviceId: device_id,
           weight,
-          status,
+          status: statusValue,
           wearStatus: item.wearStatus,
           isWorn: item.isWorn,
           timestamp: new Date()
@@ -147,7 +215,7 @@ class MqttService {
       }
 
       // Check for alerts
-      if (status === 'LOW') {
+      if (statusValue === 'LOW') {
         // Use custom alert message if available, otherwise use default
         const alertMessage = item.customAlertMessage 
           ? item.customAlertMessage 
@@ -159,7 +227,7 @@ class MqttService {
           type: 'low_weight',
           severity: 'warning',
           message: alertMessage,
-          data: { weight, threshold }
+          data: { weight, threshold: thresholdValue }
         });
       }
 
@@ -214,6 +282,16 @@ class MqttService {
     } else {
       logger.warn('MQTT client not connected, cannot publish');
     }
+  }
+
+  publishCommand(deviceId, message) {
+    if (!deviceId) {
+      logger.warn('Cannot publish command: missing deviceId');
+      return;
+    }
+
+    const topic = `itemreminder/devices/${deviceId}/command`;
+    this.publish(topic, message);
   }
 
   stop() {
