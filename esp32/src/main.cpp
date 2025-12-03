@@ -14,7 +14,7 @@ const char* mqtt_server = "10.133.56.122";    // MQTT broker IP/host
 const int mqtt_port = 1883;
 const char* mqtt_user = "";                   // No authentication by default
 const char* mqtt_password = "";               // No authentication by default
-const bool MQTT_ENABLED = false;              // Toggle MQTT for debugging/experimentation
+const bool MQTT_ENABLED = false;               // Toggle MQTT for debugging/experimentation
 
 // Device Configuration - MUST MATCH THE DEVICE ID IN YOUR WEB APP
 const char* device_id = "ESP32_001";
@@ -227,21 +227,10 @@ float readWeight() {
       raw_samples++;
 
       float reading = scale.get_units(1); // Calibrated grams
-      Serial.print("[DEBUG] Reading ");
-      Serial.print(i);
-      Serial.print(": ");
-      Serial.print(reading);
-      Serial.print("g (raw: ");
-      Serial.print(raw);
-      Serial.println(")");
-      
-      // Filter out obvious errors; wide range helps during calibration/debug
+      // Filter out obvious errors
       if (reading >= min_valid_weight && reading <= max_valid_weight) {
         total += reading;
         valid_readings++;
-        Serial.println("  -> VALID");
-      } else {
-        Serial.println("  -> REJECTED (outside filter range)");
       }
     }
     delay(20); // Shorter delay for faster sampling
@@ -259,6 +248,7 @@ float readWeight() {
     return round(average * 10.0) / 10.0;
   }
 
+  // No valid readings: return last known weight without verbose warning
   return current_weight; // Return last known weight if no valid readings
 }
 
@@ -460,26 +450,10 @@ void setup() {
     scale.tare();
     Serial.println("[OK] Scale tared");
 
-    // Quick self-test: take a few units readings to verify calibration applied
+    // Quick self-test: take a few unit readings to verify calibration applied
     float selftest = scale.get_units(5);
-    Serial.print("[SELFTEST] get_units(5) = ");
-    Serial.print(selftest);
-    Serial.println(" g");
-
     if (selftest < min_valid_weight || selftest > max_valid_weight) {
-      Serial.println("[WARN] Selftest reading outside expected range. Re-applying settings and retrying...");
-      // Re-apply scale and tare
-      scale.set_scale(calibration_factor);
-      delay(100);
-      scale.tare();
-      delay(200);
-      float selftest2 = scale.get_units(5);
-      Serial.print("[SELFTEST] Retry get_units(5) = ");
-      Serial.print(selftest2);
-      Serial.println(" g");
-      if (selftest2 < min_valid_weight || selftest2 > max_valid_weight) {
-        Serial.println("[ERR] HX711 readings still outside expected range after retry. You may need to re-calibrate or check wiring.");
-      }
+      Serial.println("[WARN] Selftest reading outside expected range. You may need to re-calibrate or check wiring.");
     }
 
     // Give user the option to enter calibration mode via serial
