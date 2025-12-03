@@ -399,6 +399,23 @@ void setup() {
   // Initialize persistent storage for calibration
   prefs.begin("scale", false);
 
+  // Validate stored calibration factor (ensure NVS contains a reasonable value)
+  if (prefs.isKey("calib")) {
+    float stored_check = prefs.getFloat("calib", calibration_factor);
+    Serial.print("[DBG] Found stored calib in NVS: ");
+    Serial.println(stored_check, 6);
+    // Reject obviously invalid stored values
+    if (isnan(stored_check) || stored_check == 0.0 || stored_check < 0.1 || stored_check > 100000.0) {
+      Serial.println("[WARN] Stored calibration value looks invalid. Overwriting with compiled fallback and saving to NVS.");
+      prefs.putFloat("calib", calibration_factor);
+    } else {
+      calibration_factor = stored_check;
+    }
+  } else {
+    Serial.println("[INFO] No calibration value found in NVS. Writing compiled fallback to NVS.");
+    prefs.putFloat("calib", calibration_factor);
+  }
+
   Serial.println();
   Serial.println("=================================");
   Serial.println(" ESP32-C3 Item Reminder System ");
@@ -413,23 +430,57 @@ void setup() {
   Serial.println(HX711_DT);
   Serial.print("   SCK Pin: GPIO ");
   Serial.println(HX711_SCK);
-
   scale.begin(HX711_DT, HX711_SCK);
+
+  // Small delay to let HX711 settle after power-up
+  delay(200);
 
   if (scale.is_ready()) {
     Serial.println("[OK] HX711 initialized");
 
-    // Set calibration factor
-    // Load calibration factor from NVS if present
-    calibration_factor = prefs.getFloat("calib", calibration_factor);
-    scale.set_scale(calibration_factor);
-    Serial.print("[OK] Calibration factor set to: ");
-    Serial.println(calibration_factor);
+    // Debug: check if calibration is stored in NVS
+    bool hasCalib = prefs.isKey("calib");
+    Serial.print("[DBG] NVS has 'calib' key: ");
+    Serial.println(hasCalib ? "yes" : "no");
 
-    // Tare the scale (zero it)
+    // Load calibration factor from NVS (fallback to compiled value)
+    float stored = prefs.getFloat("calib", calibration_factor);
+    Serial.print("[DBG] Stored calib read from NVS: ");
+    Serial.println(stored, 6);
+
+    // Ensure we use the value we expect
+    calibration_factor = stored;
+    Serial.print("[OK] Calibration factor set to: ");
+    Serial.println(calibration_factor, 6);
+
+    // Apply scale and tare after a short pause
+    scale.set_scale(calibration_factor);
+    delay(100);
     Serial.println("Taring scale (please ensure scale is empty)...");
     scale.tare();
     Serial.println("[OK] Scale tared");
+
+    // Quick self-test: take a few units readings to verify calibration applied
+    float selftest = scale.get_units(5);
+    Serial.print("[SELFTEST] get_units(5) = ");
+    Serial.print(selftest);
+    Serial.println(" g");
+
+    if (selftest < min_valid_weight || selftest > max_valid_weight) {
+      Serial.println("[WARN] Selftest reading outside expected range. Re-applying settings and retrying...");
+      // Re-apply scale and tare
+      scale.set_scale(calibration_factor);
+      delay(100);
+      scale.tare();
+      delay(200);
+      float selftest2 = scale.get_units(5);
+      Serial.print("[SELFTEST] Retry get_units(5) = ");
+      Serial.print(selftest2);
+      Serial.println(" g");
+      if (selftest2 < min_valid_weight || selftest2 > max_valid_weight) {
+        Serial.println("[ERR] HX711 readings still outside expected range after retry. You may need to re-calibrate or check wiring.");
+      }
+    }
 
     // Give user the option to enter calibration mode via serial
     Serial.println("\nPress 'c' within 5 seconds to enter CALIBRATION MODE...");
