@@ -58,9 +58,6 @@ export const SocketProvider = ({ children }) => {
       }
     }
   }, [isAuthenticated, user]);
-      }
-    }
-  }, [isAuthenticated]);
 
   const value = {
     socket,
