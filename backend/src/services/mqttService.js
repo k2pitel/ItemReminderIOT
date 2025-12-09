@@ -150,13 +150,11 @@ class MqttService {
 
       // Update basic data
       item.currentWeight = weight;
-<<<<<<< HEAD
-      item.thresholdWeight = thresholdValue;
-=======
       if (threshold !== undefined) {
         item.thresholdWeight = threshold;
+      } else {
+        item.thresholdWeight = thresholdValue;
       }
->>>>>>> origin/Update-1.3
       item.lastReading = new Date();
       
       // Handle detection mode and status
@@ -180,10 +178,6 @@ class MqttService {
           item.wearableMode = false;
         }
         
-<<<<<<< HEAD
-        // For weight mode, use the status from sensor (LOW/OK/EMPTY)
-        item.status = statusValue;
-=======
         // For weight mode, use the status from sensor or calculate it
         if (status) {
           item.status = status;
@@ -197,7 +191,6 @@ class MqttService {
             item.status = 'OK';
           }
         }
->>>>>>> origin/Update-1.3
         item.wearStatus = 'N/A';
       }
       
@@ -216,13 +209,8 @@ class MqttService {
         itemId: item._id,
         deviceId: device_id,
         weight,
-<<<<<<< HEAD
-        threshold: thresholdValue,
-        status: statusValue,
-=======
         threshold: threshold !== undefined ? threshold : item.thresholdWeight,
         status: status || item.status,
->>>>>>> origin/Update-1.3
         wifiRssi: wifi_rssi
       });
       await reading.save();
