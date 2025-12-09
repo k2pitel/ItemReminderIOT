@@ -221,24 +221,15 @@ class MqttService {
           itemId: item._id,
           deviceId: device_id,
           weight,
-<<<<<<< HEAD
-          status: statusValue,
-=======
           status: item.status,
->>>>>>> origin/Update-1.3
           wearStatus: item.wearStatus,
           isWorn: item.isWorn,
           timestamp: new Date()
         });
       }
 
-<<<<<<< HEAD
-      // Check for alerts
-      if (statusValue === 'LOW') {
-=======
       // Check for alerts - use item.status which was calculated above
       if (item.status === 'LOW' && item.notificationsEnabled) {
->>>>>>> origin/Update-1.3
         // Use custom alert message if available, otherwise use default
         const alertMessage = item.customAlertMessage 
           ? item.customAlertMessage 
@@ -250,11 +241,7 @@ class MqttService {
           type: 'low_weight',
           severity: 'warning',
           message: alertMessage,
-<<<<<<< HEAD
-          data: { weight, threshold: thresholdValue }
-=======
           data: { weight, threshold: item.thresholdWeight }
->>>>>>> origin/Update-1.3
         });
       }
 
