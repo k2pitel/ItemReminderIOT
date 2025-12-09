@@ -10,11 +10,11 @@ const char* ssid = "Aura_Fiber_82031";
 const char* password = "Rn2NGnZWEK2S";
 
 // MQTT Configuration
-const char* mqtt_server = "10.133.56.122";    // MQTT broker IP/host
+const char* mqtt_server = "mosquitto";        // MQTT broker - use container name in Docker
 const int mqtt_port = 1883;
 const char* mqtt_user = "";                   // No authentication by default
 const char* mqtt_password = "";               // No authentication by default
-const bool MQTT_ENABLED = false;               // Toggle MQTT for debugging/experimentation
+const bool MQTT_ENABLED = true;               // ✅ ENABLED - Will send real sensor data
 
 // Device Configuration - MUST MATCH THE DEVICE ID IN YOUR WEB APP
 const char* device_id = "ESP32_001";
