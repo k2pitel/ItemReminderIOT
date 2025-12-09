@@ -15,10 +15,10 @@ export const useSocket = () => {
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && user) {
       // Use current host with same protocol (http or https)
       const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
       const SOCKET_URL = `${protocol}//${window.location.host}`;
@@ -30,13 +30,20 @@ export const SocketProvider = ({ children }) => {
       });
 
       newSocket.on('connect', () => {
-        console.log('Socket connected');
+        console.log('Socket connected:', newSocket.id);
         setConnected(true);
+        
+        // Authenticate socket connection
+        newSocket.emit('authenticate', { userId: user._id });
       });
 
       newSocket.on('disconnect', () => {
         console.log('Socket disconnected');
         setConnected(false);
+      });
+
+      newSocket.on('error', (error) => {
+        console.error('Socket error:', error);
       });
 
       setSocket(newSocket);
@@ -48,6 +55,9 @@ export const SocketProvider = ({ children }) => {
       if (socket) {
         socket.close();
         setSocket(null);
+      }
+    }
+  }, [isAuthenticated, user]);
       }
     }
   }, [isAuthenticated]);

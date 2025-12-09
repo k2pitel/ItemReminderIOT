@@ -23,10 +23,38 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchItems();
+    
+    // Polling interval: Refetch items every 10 seconds to ensure we have latest data
+    const pollInterval = setInterval(() => {
+      fetchItems();
+    }, 10000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   useEffect(() => {
     if (!socket || !user) return;
+
+    // Listen for weight updates from sensors
+    socket.on('weight_update', (data) => {
+      console.log('Dashboard: Received weight update', data);
+      setItems(prevItems =>
+        prevItems.map(item => {
+          // Match by itemId or deviceId
+          if (item._id === data.itemId || item.deviceId === data.deviceId) {
+            return {
+              ...item,
+              currentWeight: data.weight,
+              status: data.status,
+              wearStatus: data.wearStatus,
+              isWorn: data.isWorn,
+              lastReading: new Date()
+            };
+          }
+          return item;
+        })
+      );
+    });
 
     // Listen for geofence updates
     socket.on('geofence-update', (data) => {
@@ -48,6 +76,7 @@ const Dashboard = () => {
     });
 
     return () => {
+      socket.off('weight_update');
       socket.off('geofence-update');
       socket.off('item-update');
     };
