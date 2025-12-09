@@ -207,7 +207,7 @@ const Map = () => {
   return (
     <Layout>
       <Box sx={{ mb: 2, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Typography variant="h4" sx={{ flexGrow: 1 }}>
+        <Typography variant="h5" sx={{ flexGrow: 1, fontWeight: 500 }}>
           Live Map
         </Typography>
         
@@ -216,7 +216,7 @@ const Map = () => {
             <Switch
               checked={isTracking}
               onChange={handleTrackingToggle}
-              color="primary"
+              size="small"
             />
           }
           label="Track My Location"

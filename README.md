@@ -1,6 +1,6 @@
 # ItemReminderIOT
 
-An ESP32 + MQTT + Node.js + MongoDB + React system for tracking items (e.g., medications, groceries) with geofencing and real-time alerts. ESP32 simulates a weight sensor publishing via MQTT. Backend stores data, checks geofence rules, and sends Email/Firebase notifications. Frontend shows live status, trends, and analytics. Secure, scalable, multi-user design for smart, location-aware reminders.
+An ESP32 + MQTT + Node.js + MongoDB + React system for tracking items (e.g., medications, groceries) with geofencing and real-time alerts. ESP32 simulates a weight sensor publishing via MQTT. Backend stores data, checks geofence rules, and sends email notifications. Frontend shows live status, trends, and analytics. Secure, scalable, multi-user design for smart, location-aware reminders.
 
 ## 🌟 Features
 
@@ -9,7 +9,7 @@ An ESP32 + MQTT + Node.js + MongoDB + React system for tracking items (e.g., med
 - **Geofencing**: Location-based alerts and reminders
 - **Analytics Dashboard**: View trends, statistics, and historical data
 - **Multi-user Support**: Secure authentication with JWT
-- **Notifications**: Email (SMTP) and Firebase Cloud Messaging integration
+- **Notifications**: Email notifications via SMTP (Gmail)
 - **Responsive UI**: Material-UI based React frontend
 - **Docker Support**: Easy deployment with Docker Compose
 
@@ -92,13 +92,13 @@ ItemReminderIOT/
    # Edit .env with your configuration
    ```
 
-   **📧 Optional: Setup Notification Services**
+   **📧 Optional: Setup Email Notifications**
    
-   To enable email, push, and mobile notifications:
-   - See [NOTIFICATION_QUICKSTART.md](NOTIFICATION_QUICKSTART.md) for quick setup
-   - See [docs/NOTIFICATION_SETUP.md](docs/NOTIFICATION_SETUP.md) for detailed instructions
-   
-   Configure Gmail and/or Firebase in your `.env` file.
+   To enable email notifications, configure Gmail SMTP in your `.env` file:
+   - SMTP_HOST=smtp.gmail.com
+   - SMTP_PORT=587
+   - SMTP_USER=your-email@gmail.com
+   - SMTP_PASS=your-gmail-app-password (generate at https://myaccount.google.com/apppasswords)
 
 4. **Start MongoDB and MQTT broker**
    ```bash
@@ -193,9 +193,11 @@ MONGODB_URI=mongodb://localhost:27017/itemreminder
 MQTT_BROKER=mqtt://localhost:1883
 JWT_SECRET=your-secret-key
 FRONTEND_URL=http://localhost:3000
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
-SMTP_PASS=your-app-password
-FIREBASE_SERVER_KEY=your-firebase-key
+SMTP_PASS=your-gmail-app-password
+EMAIL_FROM="IoT Item Reminder <your-email@gmail.com>"
 ```
 
 ### Frontend Environment Variables
@@ -217,7 +219,7 @@ MQTT Broker (Mosquitto)
 Backend Server (Node.js)
     ├── MongoDB (Data Storage)
     ├── Socket.IO (Real-time Updates)
-    └── Notification Services (Email/Firebase)
+    └── Notification Service (Email)
     ↓
 Frontend (React)
 ```
@@ -228,7 +230,7 @@ Frontend (React)
 2. **Backend** subscribes to MQTT, processes data
 3. **MongoDB** stores readings and item status
 4. **Geofencing Service** checks location-based rules
-5. **Notification Service** sends alerts via Email/Firebase
+5. **Notification Service** sends alerts via Email
 6. **Socket.IO** broadcasts real-time updates to frontend
 7. **Frontend** displays live data and visualizations
 

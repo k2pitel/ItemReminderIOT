@@ -37,93 +37,32 @@ class NotificationService {
   async sendNotification(alert) {
     try {
       const user = await User.findById(alert.userId);
-      if (!user) return;
-
-      // Always log notification for testing
-      logger.info(`🚨 ALERT TRIGGERED: ${alert.message}`);
-      logger.info(`� Email notification will be sent to: ${user.email || user.username || user._id}`);
-      
-      // Send email notification if enabled
-      if (user.notifications && user.notifications.email) {
-        await this.sendEmailNotification(alert, user);
-      } else {
-        logger.info('📧 Email notification: User has not enabled email notifications');
-      }
-    } catch (error) {
-      logger.error('Error sending notification:', error);
-    }
-  }
-
-  async sendFirebaseNotification(alert, user) {
-    try {
-      if (!user.fcmToken) {
-        logger.warn('No FCM token for user:', user._id);
+      if (!user) {
+        logger.warn('User not found for notification:', alert.userId);
         return;
       }
 
-      // Determine notification title and body based on alert type
-      let title, body, icon;
+      // Always log notification
+      logger.info(`🚨 ALERT TRIGGERED: ${alert.message}`);
+      logger.info(`📧 Sending email notification to: ${user.email || user.username || user._id}`);
       
-      switch (alert.type) {
-        case 'low_weight':
-          title = '⚠️ Low Stock Alert';
-          icon = '/icons/alert-warning.png';
-          break;
-        case 'geofence':
-          title = '📍 Geofence Alert';
-          icon = '/icons/alert-location.png';
-          break;
-        case 'offline':
-          title = '🔴 Device Offline';
-          icon = '/icons/alert-offline.png';
-          break;
-        default:
-          title = '🔔 Item Reminder Alert';
-          icon = '/icons/alert-default.png';
-      }
-
-      body = alert.message;
-
-      const notification = {
-        title: title,
-        body: body,
-        icon: icon
-      };
-
-      const data = {
-        alertId: alert._id.toString(),
-        type: alert.type,
-        severity: alert.severity,
-        timestamp: (alert.createdAt || new Date()).toISOString()
-      };
-
-      // Use the new Firebase service
-      const result = await firebaseService.sendNotification(user.fcmToken, notification, data);
+      // Send email notification
+      await this.sendEmailNotification(alert, user);
       
-      if (result.success) {
-        logger.info(`🔥 Firebase notification sent to ${user.username || user.email}`);
-      }
     } catch (error) {
-      // Handle invalid token error
-      if (error.message === 'INVALID_TOKEN') {
-        logger.warn(`Invalid FCM token for user ${user._id}, clearing token`);
-        // Clear the invalid token from user record
-        await User.findByIdAndUpdate(user._id, { fcmToken: null });
-      } else {
-        logger.error('Firebase notification error:', error.message);
-      }
+      logger.error('Error sending notification:', error);
     }
   }
 
   async sendEmailNotification(alert, user) {
     try {
       if (!this.emailTransporter) {
-        logger.warn('Email transporter not configured');
+        logger.warn('Email transporter not configured. Check SMTP settings in .env file.');
         return;
       }
 
       if (!user.email) {
-        logger.warn('User has no email address');
+        logger.warn(`User ${user.username || user._id} has no email address`);
         return;
       }
 

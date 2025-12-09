@@ -3,7 +3,6 @@ const logger = require('../utils/logger');
 const Item = require('../models/Item');
 const Reading = require('../models/Reading');
 const alertService = require('./alertService');
-const geofenceService = require('./geofenceService');
 
 class MqttService {
   constructor() {
@@ -151,7 +150,13 @@ class MqttService {
 
       // Update basic data
       item.currentWeight = weight;
+<<<<<<< HEAD
       item.thresholdWeight = thresholdValue;
+=======
+      if (threshold !== undefined) {
+        item.thresholdWeight = threshold;
+      }
+>>>>>>> origin/Update-1.3
       item.lastReading = new Date();
       
       // Handle detection mode and status
@@ -175,8 +180,24 @@ class MqttService {
           item.wearableMode = false;
         }
         
+<<<<<<< HEAD
         // For weight mode, use the status from sensor (LOW/OK/EMPTY)
         item.status = statusValue;
+=======
+        // For weight mode, use the status from sensor or calculate it
+        if (status) {
+          item.status = status;
+        } else {
+          // Calculate status based on weight and threshold
+          if (weight <= 0) {
+            item.status = 'EMPTY';
+          } else if (weight < item.thresholdWeight) {
+            item.status = 'LOW';
+          } else {
+            item.status = 'OK';
+          }
+        }
+>>>>>>> origin/Update-1.3
         item.wearStatus = 'N/A';
       }
       
@@ -190,13 +211,18 @@ class MqttService {
       
       await item.save();
 
-      // Save reading
+      // Save reading - use item values if not provided in MQTT message
       const reading = new Reading({
         itemId: item._id,
         deviceId: device_id,
         weight,
+<<<<<<< HEAD
         threshold: thresholdValue,
         status: statusValue,
+=======
+        threshold: threshold !== undefined ? threshold : item.thresholdWeight,
+        status: status || item.status,
+>>>>>>> origin/Update-1.3
         wifiRssi: wifi_rssi
       });
       await reading.save();
@@ -207,15 +233,24 @@ class MqttService {
           itemId: item._id,
           deviceId: device_id,
           weight,
+<<<<<<< HEAD
           status: statusValue,
+=======
+          status: item.status,
+>>>>>>> origin/Update-1.3
           wearStatus: item.wearStatus,
           isWorn: item.isWorn,
           timestamp: new Date()
         });
       }
 
+<<<<<<< HEAD
       // Check for alerts
       if (statusValue === 'LOW') {
+=======
+      // Check for alerts - use item.status which was calculated above
+      if (item.status === 'LOW' && item.notificationsEnabled) {
+>>>>>>> origin/Update-1.3
         // Use custom alert message if available, otherwise use default
         const alertMessage = item.customAlertMessage 
           ? item.customAlertMessage 
@@ -227,12 +262,13 @@ class MqttService {
           type: 'low_weight',
           severity: 'warning',
           message: alertMessage,
+<<<<<<< HEAD
           data: { weight, threshold: thresholdValue }
+=======
+          data: { weight, threshold: item.thresholdWeight }
+>>>>>>> origin/Update-1.3
         });
       }
-
-      // Check geofence rules
-      await geofenceService.checkGeofenceAlerts(item);
 
     } catch (error) {
       logger.error('Error handling weight data:', error);
@@ -250,14 +286,16 @@ class MqttService {
           item.status = 'OFFLINE';
           await item.save();
 
-          await alertService.createAlert({
-            userId: item.userId,
-            itemId: item._id,
-            type: 'offline',
-            severity: 'critical',
-            message: `${item.name} is offline`,
-            data: { device_id }
-          });
+          if (item.notificationsEnabled) {
+            await alertService.createAlert({
+              userId: item.userId,
+              itemId: item._id,
+              type: 'offline',
+              severity: 'critical',
+              message: `${item.name} is offline`,
+              data: { device_id }
+            });
+          }
         }
 
         // Emit real-time update

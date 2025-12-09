@@ -42,6 +42,10 @@ router.post('/', auth, async (req, res) => {
     const item = new Item(itemData);
     await item.save();
 
+    // Broadcast item change to user's sockets
+    const io = req.app.get('io');
+    io.to(`user-${req.userId}`).emit('item-update', { action: 'create', item });
+
     res.status(201).json(item);
   } catch (error) {
     logger.error('Create item error:', error);
@@ -62,6 +66,7 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
+<<<<<<< HEAD
     // Propagate important changes back to the device via MQTT command channel
     const commandPayload = {};
     if (req.body.thresholdWeight !== undefined) {
@@ -73,6 +78,11 @@ router.put('/:id', auth, async (req, res) => {
     if (Object.keys(commandPayload).length > 0) {
       mqttService.publishCommand(item.deviceId, commandPayload);
     }
+=======
+    // Broadcast item change to user's sockets
+    const io = req.app.get('io');
+    io.to(`user-${req.userId}`).emit('item-update', { action: 'update', item });
+>>>>>>> origin/Update-1.3
 
     res.json(item);
   } catch (error) {
@@ -93,6 +103,10 @@ router.delete('/:id', auth, async (req, res) => {
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
+
+    // Broadcast item change to user's sockets
+    const io = req.app.get('io');
+    io.to(`user-${req.userId}`).emit('item-update', { action: 'delete', itemId: req.params.id });
 
     res.json({ message: 'Item deleted successfully' });
   } catch (error) {

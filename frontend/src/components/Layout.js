@@ -24,8 +24,7 @@ import {
   Place as GeofenceIcon,
   Map as MapIcon,
   Notifications as AlertsIcon,
-  Settings as SettingsIcon,
-  Logout as LogoutIcon
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -113,93 +112,170 @@ const Layout = ({ children }) => {
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <AppBar position="static">
-        <Toolbar>
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <AppBar 
+        position="static" 
+        elevation={0}
+        sx={{ 
+          bgcolor: 'white',
+          color: 'text.primary'
+        }}
+      >
+        <Toolbar sx={{ minHeight: 64 }}>
           <IconButton
             edge="start"
-            color="inherit"
-            onClick={() => setDrawerOpen(true)}
             sx={{ mr: 2 }}
+            onClick={() => setDrawerOpen(true)}
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            IoT Item Reminder
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: '6px',
+              bgcolor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mr: 1.5
+            }}
+          >
+            <Typography variant="h6" sx={{ color: 'white', fontSize: '1.125rem', fontWeight: 600 }}>S</Typography>
+          </Box>
+          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 500, fontSize: '1rem' }}>
+            Smart Tracker
           </Typography>
-          <Typography variant="body1" sx={{ mr: 2 }}>
+          <Typography variant="body2" sx={{ mr: 2, color: 'text.secondary' }}>
             {user?.username}
           </Typography>
-          <Button color="inherit" onClick={handleLogout} startIcon={<LogoutIcon />}>
+          <Button 
+            onClick={handleLogout} 
+            size="small"
+            sx={{ color: 'text.secondary' }}
+          >
             Logout
           </Button>
         </Toolbar>
       </AppBar>
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
-        <Box sx={{ width: 250 }}>
-          <List>
-            {menuItems.map((item) => (
-              <ListItem
-                button
-                key={item.text}
-                selected={location.pathname === item.path}
-                onClick={() => {
-                  navigate(item.path);
-                  setDrawerOpen(false);
-                }}
-              >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
-            ))}
-          </List>
+      <Drawer 
+        open={drawerOpen} 
+        onClose={() => setDrawerOpen(false)}
+        PaperProps={{
+          sx: {
+            width: 260,
+            bgcolor: 'white',
+            borderRight: '1px solid #e5e7eb'
+          }
+        }}
+      >
+        <Box sx={{ p: 3, borderBottom: '1px solid #e5e7eb' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: '6px',
+                bgcolor: 'primary.main',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mr: 2
+              }}
+            >
+              <Typography variant="h5" sx={{ color: 'white', fontWeight: 600 }}>S</Typography>
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 500, fontSize: '1rem' }}>Smart Tracker</Typography>
+              <Typography variant="caption" color="text.secondary">IoT Management</Typography>
+            </Box>
+          </Box>
         </Box>
+        <List sx={{ px: 1, py: 2 }}>
+          {menuItems.map((item) => (
+            <ListItem
+              button
+              key={item.text}
+              selected={location.pathname === item.path}
+              onClick={() => {
+                navigate(item.path);
+                setDrawerOpen(false);
+              }}
+              sx={{
+                borderRadius: 1,
+                mb: 0.5,
+                '&.Mui-selected': {
+                  bgcolor: 'grey.100',
+                  '&:hover': {
+                    bgcolor: 'grey.200'
+                  }
+                },
+                '&:hover': {
+                  bgcolor: 'grey.50'
+                }
+              }}
+            >
+              <ListItemIcon sx={{ color: location.pathname === item.path ? 'primary.main' : 'text.secondary', minWidth: 40 }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{ 
+                  fontSize: '0.875rem',
+                  fontWeight: location.pathname === item.path ? 500 : 400 
+                }}
+              />
+            </ListItem>
+          ))}
+        </List>
       </Drawer>
 
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4, flex: 1 }}>
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6} md={3}>
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid item xs={6} sm={3}>
             <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  Total Items
+              <CardContent sx={{ py: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Total
                 </Typography>
-                <Typography variant="h4">{stats.total}</Typography>
+                <Typography variant="h4" sx={{ fontWeight: 600 }}>
+                  {stats.total}
+                </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={3}>
             <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  Status: OK
+              <CardContent sx={{ py: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  OK
                 </Typography>
-                <Typography variant="h4" color="success.main">
+                <Typography variant="h4" sx={{ fontWeight: 600, color: 'success.main' }}>
                   {stats.ok}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={3}>
             <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
-                  Status: Low
+              <CardContent sx={{ py: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                  Low
                 </Typography>
-                <Typography variant="h4" color="warning.main">
+                <Typography variant="h4" sx={{ fontWeight: 600, color: 'warning.main' }}>
                   {stats.low}
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid item xs={6} sm={3}>
             <Card>
-              <CardContent>
-                <Typography color="text.secondary" gutterBottom>
+              <CardContent sx={{ py: 2 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                   Offline
                 </Typography>
-                <Typography variant="h4" color="error.main">
+                <Typography variant="h4" sx={{ fontWeight: 600, color: 'error.main' }}>
                   {stats.offline}
                 </Typography>
               </CardContent>

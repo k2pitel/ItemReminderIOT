@@ -17,7 +17,9 @@ import {
   IconButton,
   Chip,
   MenuItem,
-  Typography
+  Typography,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { Edit, Delete, Add } from '@mui/icons-material';
 import Layout from '../components/Layout';
@@ -37,7 +39,8 @@ const Items = () => {
     customAlertMessage: '',
     thresholdWeight: 10,
     unit: 'grams',
-    detectionMode: 'weight'
+    detectionMode: 'weight',
+    notificationsEnabled: true
   });
 
   useEffect(() => {
@@ -75,7 +78,8 @@ const Items = () => {
         customAlertMessage: item.customAlertMessage || '',
         thresholdWeight: item.thresholdWeight,
         unit: item.unit,
-        detectionMode: item.detectionMode || 'weight'
+        detectionMode: item.detectionMode || 'weight',
+        notificationsEnabled: item.notificationsEnabled !== undefined ? item.notificationsEnabled : true
       });
     } else {
       setEditingItem(null);
@@ -88,7 +92,8 @@ const Items = () => {
         customAlertMessage: '',
         thresholdWeight: 10,
         unit: 'grams',
-        detectionMode: 'weight'
+        detectionMode: 'weight',
+        notificationsEnabled: true
       });
     }
     setDialogOpen(true);
@@ -103,6 +108,15 @@ const Items = () => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
+    });
+  };
+
+  const handleNotificationToggle = (e) => {
+    const isEnabled = e.target.checked;
+    setFormData({
+      ...formData,
+      notificationsEnabled: isEnabled,
+      thresholdWeight: isEnabled ? formData.thresholdWeight : 0
     });
   };
 
@@ -180,6 +194,7 @@ const Items = () => {
               <TableCell>Threshold</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Mode</TableCell>
+              <TableCell>Notifications</TableCell>
               <TableCell>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -199,7 +214,7 @@ const Items = () => {
                   {item.currentWeight?.toFixed(1) || 0} {item.unit}
                 </TableCell>
                 <TableCell>
-                  {item.thresholdWeight} {item.unit}
+                  {item.notificationsEnabled ? `${item.thresholdWeight} ${item.unit}` : 'N/A'}
                 </TableCell>
                 <TableCell>
                   <Chip
@@ -213,6 +228,14 @@ const Items = () => {
                     label={item.detectionMode === 'wearable' ? 'ON/OFF' : 'Low/OK'}
                     color={item.detectionMode === 'wearable' ? 'secondary' : 'primary'}
                     size="small"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Chip
+                    label={item.notificationsEnabled ? 'Enabled' : 'Disabled'}
+                    color={item.notificationsEnabled ? 'success' : 'default'}
+                    size="small"
+                    variant={item.notificationsEnabled ? 'filled' : 'outlined'}
                   />
                 </TableCell>
                 <TableCell>
@@ -336,17 +359,19 @@ const Items = () => {
             <MenuItem value="wearable">Wearable Mode (ON/OFF detection)</MenuItem>
           </TextField>
 
-          <TextField
-            fullWidth
-            label="Threshold Weight"
-            name="thresholdWeight"
-            type="number"
-            value={formData.thresholdWeight}
-            onChange={handleChange}
-            margin="normal"
-            required
-            helperText={formData.detectionMode === 'weight' ? 'Alert when weight is below this value' : 'Reference weight for this item'}
-          />
+          {formData.notificationsEnabled && (
+            <TextField
+              fullWidth
+              label="Threshold Weight"
+              name="thresholdWeight"
+              type="number"
+              value={formData.thresholdWeight}
+              onChange={handleChange}
+              margin="normal"
+              required
+              helperText={formData.detectionMode === 'weight' ? 'Alert when weight is below this value' : 'Reference weight for this item'}
+            />
+          )}
           <TextField
             fullWidth
             select
@@ -361,6 +386,22 @@ const Items = () => {
             <MenuItem value="oz">Ounces</MenuItem>
             <MenuItem value="lbs">Pounds</MenuItem>
           </TextField>
+
+          <Box sx={{ mt: 3, mb: 2 }}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.notificationsEnabled}
+                  onChange={handleNotificationToggle}
+                  color="primary"
+                />
+              }
+              label="Enable Notifications"
+            />
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ ml: 4 }}>
+              When disabled, threshold will be set to 0 and no email or push notifications will be sent
+            </Typography>
+          </Box>
           
           <Box sx={{ mt: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
             <Typography variant="caption" color="text.secondary" display="block">

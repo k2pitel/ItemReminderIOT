@@ -94,11 +94,12 @@ const Alerts = () => {
 
   return (
     <Layout>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h4">Alerts</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 500 }}>Alerts</Typography>
         <Button
           variant="outlined"
           onClick={fetchAlerts}
+          size="small"
         >
           Refresh
         </Button>
