@@ -62,6 +62,10 @@ io.on('connection', (socket) => {
     logger.info(`User ${data.userId} authenticated on socket ${socket.id}`);
   });
 
+  // Rate limiting for location updates
+  const locationUpdateLimiter = new Map();
+  const LOCATION_UPDATE_COOLDOWN = 4000; // 4 seconds minimum between updates
+
   // Handle real-time location updates
   socket.on('location-update', async (data) => {
     try {
@@ -69,6 +73,15 @@ io.on('connection', (socket) => {
         socket.emit('error', { message: 'Not authenticated' });
         return;
       }
+
+      // Rate limit: Check last update time for this user
+      const lastUpdate = locationUpdateLimiter.get(socket.userId);
+      const now = Date.now();
+      if (lastUpdate && (now - lastUpdate < LOCATION_UPDATE_COOLDOWN)) {
+        // Silently ignore - don't spam logs
+        return;
+      }
+      locationUpdateLimiter.set(socket.userId, now);
 
       const { latitude, longitude, accuracy } = data;
       

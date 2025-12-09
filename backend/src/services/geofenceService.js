@@ -56,17 +56,24 @@ class GeofenceService {
 
   async updateUserLocation(userId, userLocation) {
     try {
+      // Use lean() for faster queries when we don't need full Mongoose documents initially
       const geofences = await Geofence.find({ userId, active: true });
-      const items = await Item.find({ userId, active: true, geofenceId: { $ne: null } }).populate('geofenceId');
       const now = new Date();
       const alertsTriggered = [];
+      const geofenceStatusChanges = [];
 
       // Update geofence tracking
       for (const geofence of geofences) {
         const isInside = this.isPointInGeofence(userLocation, geofence);
         const wasInside = geofence.userCurrentlyInside;
+        
+        // Skip if state hasn't changed
+        if (isInside === wasInside) {
+          continue;
+        }
 
         geofence.lastLocationUpdate = now;
+        geofenceStatusChanges.push(geofence._id);
 
         // User entering geofence
         if (isInside && !wasInside) {
@@ -76,7 +83,8 @@ class GeofenceService {
           
           logger.info(`User ${userId} entered geofence: ${geofence.name}`);
           
-          // Check for items with "enter" or "both" trigger
+          // Lazy load items only when needed
+          const items = await Item.find({ userId, active: true, geofenceId: geofence._id }).populate('geofenceId');
           await this.checkItemsForGeofence(userId, geofence, items, 'enter', userLocation, alertsTriggered);
         }
         
@@ -87,18 +95,21 @@ class GeofenceService {
 
           logger.info(`User ${userId} left geofence: ${geofence.name}`);
           
-          // Check for items with "exit" or "both" trigger
+          // Lazy load items only when needed
+          const items = await Item.find({ userId, active: true, geofenceId: geofence._id }).populate('geofenceId');
           await this.checkItemsForGeofence(userId, geofence, items, 'exit', userLocation, alertsTriggered);
         }
 
+        // Only save if state changed
         await geofence.save();
       }
 
+      // Return compact geofence status - all geofences with their current state
       return {
         location: userLocation,
         timestamp: now,
         geofenceStatus: geofences.map(g => ({
-          id: g._id,
+          id: g._id.toString(),
           name: g.name,
           isInside: g.userCurrentlyInside,
           distance: geolib.getDistance(userLocation, g.location)
@@ -121,7 +132,7 @@ class GeofenceService {
     for (const item of relevantItems) {
       let shouldAlert = false;
       let alertMessage = '';
-      let alertSeverity = 'medium';
+      let alertSeverity = 'warning';
 
       // Check conditions based on detection mode
       if (item.detectionMode === 'wearable') {
@@ -130,7 +141,7 @@ class GeofenceService {
           shouldAlert = true;
           alertMessage = item.customAlertMessage || 
             `Don't forget your ${item.name}! It's not being worn.`;
-          alertSeverity = 'high';
+          alertSeverity = 'warning';
         }
       } else {
         // Weight mode: Alert if LOW or EMPTY
@@ -138,15 +149,15 @@ class GeofenceService {
           shouldAlert = true;
           alertMessage = item.customAlertMessage || 
             `${item.name} is ${item.status.toLowerCase()}!`;
-          alertSeverity = item.status === 'EMPTY' ? 'critical' : 'high';
+          alertSeverity = item.status === 'EMPTY' ? 'critical' : 'warning';
         }
       }
 
-      if (shouldAlert) {
+      if (shouldAlert && item.notificationsEnabled) {
         const alert = await alertService.createAlert({
           userId: userId,
           itemId: item._id,
-          type: `geofence_${triggerType}`,
+          type: 'geofence',
           severity: alertSeverity,
           message: alertMessage,
           data: {

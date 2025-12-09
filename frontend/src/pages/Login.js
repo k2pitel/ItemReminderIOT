@@ -42,19 +42,47 @@ const Login = () => {
           minHeight: '100vh',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          py: 4
         }}
       >
-        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
-          <Typography variant="h4" align="center" gutterBottom>
-            IoT Item Reminder
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" gutterBottom>
-            Login
-          </Typography>
+        <Paper 
+          elevation={0} 
+          sx={{ 
+            p: 5, 
+            width: '100%',
+            bgcolor: 'white',
+            border: '1px solid #e5e7eb'
+          }}
+        >
+          <Box sx={{ mb: 5, textAlign: 'center' }}>
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: '8px',
+                bgcolor: 'primary.main',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 20px'
+              }}
+            >
+              <Typography variant="h4" sx={{ color: 'white', fontWeight: 600 }}>S</Typography>
+            </Box>
+            <Typography variant="h4" sx={{ fontWeight: 600, mb: 1, color: 'text.primary' }}>
+              Smart Tracker
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Sign in to your account
+            </Typography>
+          </Box>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert 
+              severity="error" 
+              sx={{ mb: 3 }}
+            >
               {error}
             </Alert>
           )}
@@ -68,6 +96,8 @@ const Login = () => {
               margin="normal"
               required
               autoFocus
+              size="small"
+              sx={{ mb: 2 }}
             />
             <TextField
               fullWidth
@@ -77,21 +107,30 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
               required
+              size="small"
+              sx={{ mb: 3 }}
             />
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              size="large"
-              sx={{ mt: 3, mb: 2 }}
               disabled={loading}
+              sx={{ mb: 3 }}
             >
-              {loading ? 'Logging in...' : 'Login'}
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
             <Box textAlign="center">
               <Link to="/register" style={{ textDecoration: 'none' }}>
-                <Typography color="primary">
-                  Don't have an account? Register
+                <Typography 
+                  variant="body2"
+                  sx={{ 
+                    color: 'text.secondary',
+                    '&:hover': {
+                      color: 'primary.main'
+                    }
+                  }}
+                >
+                  Don't have an account? <Box component="span" sx={{ color: 'primary.main', fontWeight: 500 }}>Create one</Box>
                 </Typography>
               </Link>
             </Box>

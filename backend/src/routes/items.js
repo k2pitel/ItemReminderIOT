@@ -41,6 +41,10 @@ router.post('/', auth, async (req, res) => {
     const item = new Item(itemData);
     await item.save();
 
+    // Broadcast item change to user's sockets
+    const io = req.app.get('io');
+    io.to(`user-${req.userId}`).emit('item-update', { action: 'create', item });
+
     res.status(201).json(item);
   } catch (error) {
     logger.error('Create item error:', error);
@@ -61,6 +65,10 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(404).json({ error: 'Item not found' });
     }
 
+    // Broadcast item change to user's sockets
+    const io = req.app.get('io');
+    io.to(`user-${req.userId}`).emit('item-update', { action: 'update', item });
+
     res.json(item);
   } catch (error) {
     logger.error('Update item error:', error);
@@ -80,6 +88,10 @@ router.delete('/:id', auth, async (req, res) => {
     if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
+
+    // Broadcast item change to user's sockets
+    const io = req.app.get('io');
+    io.to(`user-${req.userId}`).emit('item-update', { action: 'delete', itemId: req.params.id });
 
     res.json({ message: 'Item deleted successfully' });
   } catch (error) {

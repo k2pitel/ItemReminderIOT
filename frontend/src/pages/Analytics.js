@@ -75,11 +75,11 @@ const Analytics = () => {
 
   return (
     <Layout>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h5" sx={{ fontWeight: 500, mb: 2 }}>
         Analytics
       </Typography>
 
-      <Box sx={{ mb: 3 }}>
+      <Box sx={{ mb: 2 }}>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}>
             <TextField
@@ -164,8 +164,8 @@ const Analytics = () => {
             </Grid>
           </Grid>
 
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 500, mb: 2 }}>
               Weight Trend
             </Typography>
             <ResponsiveContainer width="100%" height={300}>

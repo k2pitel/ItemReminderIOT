@@ -66,11 +66,11 @@ const Register = () => {
           py: 4
         }}
       >
-        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
-          <Typography variant="h4" align="center" gutterBottom>
+        <Paper elevation={0} sx={{ p: 3, width: '100%' }}>
+          <Typography variant="h5" align="center" sx={{ fontWeight: 500, mb: 0.5 }}>
             IoT Item Reminder
           </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" gutterBottom>
+          <Typography variant="caption" align="center" color="text.secondary" display="block" gutterBottom>
             Create Account
           </Typography>
 

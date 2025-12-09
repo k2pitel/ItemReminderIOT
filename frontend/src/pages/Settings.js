@@ -248,7 +248,7 @@ const Settings = () => {
 
   return (
     <Layout>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h5" sx={{ fontWeight: 500, mb: 2 }}>
         Settings
       </Typography>
 

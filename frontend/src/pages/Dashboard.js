@@ -8,16 +8,50 @@ import {
   Box,
   LinearProgress
 } from '@mui/material';
+import { LocationOn, LocationOff } from '@mui/icons-material';
 import Layout from '../components/Layout';
 import api from '../services/api';
+import { useSocket } from '../context/SocketContext';
+import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
+  const { socket } = useSocket();
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [geofenceStatus, setGeofenceStatus] = useState([]);
 
   useEffect(() => {
     fetchItems();
   }, []);
+
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    // Listen for geofence updates
+    socket.on('geofence-update', (data) => {
+      setGeofenceStatus(data.geofenceStatus || []);
+    });
+
+    // Listen for item updates
+    socket.on('item-update', (data) => {
+      console.log('Dashboard: Received item update', data);
+      if (data.action === 'create') {
+        setItems(prevItems => [...prevItems, data.item]);
+      } else if (data.action === 'update') {
+        setItems(prevItems => 
+          prevItems.map(item => item._id === data.item._id ? data.item : item)
+        );
+      } else if (data.action === 'delete') {
+        setItems(prevItems => prevItems.filter(item => item._id !== data.itemId));
+      }
+    });
+
+    return () => {
+      socket.off('geofence-update');
+      socket.off('item-update');
+    };
+  }, [socket, user]);
 
   const fetchItems = async () => {
     try {
@@ -60,6 +94,13 @@ const Dashboard = () => {
     return Math.min((current / threshold) * 100, 100);
   };
 
+  const getGeofenceStatus = (item) => {
+    if (!item.geofenceId) return null;
+    
+    const geofence = geofenceStatus.find(g => g.geofenceId === item.geofenceId);
+    return geofence;
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -72,18 +113,16 @@ const Dashboard = () => {
 
   return (
     <Layout>
-      <Typography variant="h4" gutterBottom>
-        Dashboard
-      </Typography>
-
       <Grid container spacing={3}>
-        {/* Item Status Cards */}
         {items.length === 0 ? (
           <Grid item xs={12}>
-            <Card>
+            <Card sx={{ textAlign: 'center', py: 8 }}>
               <CardContent>
-                <Typography variant="h6" align="center" color="text.secondary">
-                  No items yet. Add your first item to get started!
+                <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+                  No items yet
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  Add your first item to start tracking
                 </Typography>
               </CardContent>
             </Card>
@@ -91,10 +130,12 @@ const Dashboard = () => {
         ) : (
           items.map((item) => (
             <Grid item xs={12} sm={6} md={4} key={item._id}>
-              <Card>
+              <Card sx={{ height: '100%' }}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                    <Typography variant="h6">{item.name}</Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 500, flex: 1 }}>
+                      {item.name}
+                    </Typography>
                     <Chip
                       label={getStatusLabel(item)}
                       color={getStatusColor(item.status)}
@@ -102,34 +143,88 @@ const Dashboard = () => {
                     />
                   </Box>
                   
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '0.8125rem' }}>
                     {item.description || 'No description'}
                   </Typography>
 
-                  <Box sx={{ mt: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2">
-                        {item.detectionMode === 'wearable' ? 'Status' : 'Weight'}: {item.detectionMode === 'wearable' ? getStatusLabel(item) : `${item.currentWeight?.toFixed(1) || 0} ${item.unit}`}
+                  <Box sx={{ 
+                    mb: 2, 
+                    p: 1.5, 
+                    borderRadius: 1, 
+                    bgcolor: 'grey.50'
+                  }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.detectionMode === 'wearable' ? 'Status' : 'Weight'}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {item.detectionMode === 'wearable' ? 'Mode: ON/OFF' : `Threshold: ${item.thresholdWeight} ${item.unit}`}
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {item.detectionMode === 'wearable' 
+                          ? getStatusLabel(item) 
+                          : `${item.currentWeight?.toFixed(1) || 0} ${item.unit}`
+                        }
                       </Typography>
                     </Box>
                     {item.detectionMode !== 'wearable' && (
-                      <LinearProgress
-                        variant="determinate"
-                        value={getPercentage(item.currentWeight, item.thresholdWeight)}
-                        color={getStatusColor(item.status)}
-                      />
+                      <>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Threshold
+                          </Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                            {item.thresholdWeight} {item.unit}
+                          </Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={getPercentage(item.currentWeight, item.thresholdWeight)}
+                          color={getStatusColor(item.status)}
+                          sx={{ 
+                            height: 4, 
+                            borderRadius: 2,
+                            bgcolor: 'grey.200' 
+                          }}
+                        />
+                      </>
                     )}
                   </Box>
 
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="caption" color="text.secondary">
-                      Device: {item.deviceId}
+                  {item.geofenceId && (
+                    <Box sx={{ mb: 2 }}>
+                      {(() => {
+                        const geoStatus = getGeofenceStatus(item);
+                        if (geoStatus) {
+                          return (
+                            <Chip
+                              icon={<LocationOn />}
+                              label={`Inside: ${geoStatus.geofenceName}`}
+                              color="success"
+                              size="small"
+                              sx={{ fontWeight: 600 }}
+                            />
+                          );
+                        } else {
+                          return (
+                            <Chip
+                              icon={<LocationOff />}
+                              label="Outside geofence"
+                              size="small"
+                              sx={{ fontWeight: 600 }}
+                            />
+                          );
+                        }
+                      })()}
+                    </Box>
+                  )}
+
+                  <Box sx={{ 
+                    pt: 2, 
+                    borderTop: '1px solid',
+                    borderColor: 'grey.200'
+                  }}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                      Device ID: <strong>{item.deviceId}</strong>
                     </Typography>
-                    <br />
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" display="block">
                       Last updated: {new Date(item.lastReading).toLocaleString()}
                     </Typography>
                   </Box>

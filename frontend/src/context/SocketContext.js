@@ -19,8 +19,15 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
-      const newSocket = io(SOCKET_URL);
+      // Use current host with same protocol (http or https)
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+      const SOCKET_URL = `${protocol}//${window.location.host}`;
+      console.log('Connecting to socket:', SOCKET_URL);
+      
+      const newSocket = io(SOCKET_URL, {
+        transports: ['websocket', 'polling'],
+        secure: window.location.protocol === 'https:'
+      });
 
       newSocket.on('connect', () => {
         console.log('Socket connected');
