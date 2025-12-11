@@ -178,7 +178,12 @@ const Analytics = () => {
                 <YAxis />
                 <Tooltip
                   labelFormatter={(value) => new Date(value).toLocaleString()}
-                  formatter={(value) => [`${value !== null ? value.toFixed(2) : 'N/A'}g`, 'Weight']}
+                  formatter={(value, name) => {
+                    if (name === 'Average Weight') {
+                      return [`${value !== null && value !== undefined ? value.toFixed(2) : '0.00'}g`, 'Weight'];
+                    }
+                    return [value, name];
+                  }}
                 />
                 <Legend />
                 <Line

@@ -116,6 +116,32 @@ class NotificationService {
           `;
           break;
           
+        case 'geofence':
+          subject = '📍 Geofence Alert - Location-Based Reminder';
+          htmlBody = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #28a745;">📍 Geofence Alert</h2>
+              <p><strong>${alert.message}</strong></p>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3>Alert Details:</h3>
+                <ul>
+                  <li><strong>Type:</strong> Geofence ${alert.data?.triggerType || 'alert'}</li>
+                  <li><strong>Location:</strong> ${alert.data?.geofenceName || 'Unknown'}</li>
+                  <li><strong>Item:</strong> ${alert.data?.itemName || 'Unknown'}</li>
+                  <li><strong>Item Status:</strong> ${alert.data?.itemStatus || 'Unknown'}</li>
+                  <li><strong>Severity:</strong> ${alert.severity}</li>
+                  <li><strong>Time:</strong> ${alert.createdAt || new Date()}</li>
+                </ul>
+              </div>
+              <p style="color: #666;">Remember to check your item before leaving or entering this area.</p>
+              <hr>
+              <p style="font-size: 12px; color: #999;">
+                This is an automated message from your IoT Item Reminder system.
+              </p>
+            </div>
+          `;
+          break;
+          
         default:
           subject = '🔔 IoT Alert Notification';
           htmlBody = `

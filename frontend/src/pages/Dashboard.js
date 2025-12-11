@@ -6,9 +6,11 @@ import {
   Typography,
   Chip,
   Box,
-  LinearProgress
+  LinearProgress,
+  IconButton,
+  Tooltip
 } from '@mui/material';
-import { LocationOn, LocationOff } from '@mui/icons-material';
+import { LocationOn, LocationOff, Refresh } from '@mui/icons-material';
 import Layout from '../components/Layout';
 import api from '../services/api';
 import { useSocket } from '../context/SocketContext';
@@ -19,6 +21,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [geofenceStatus, setGeofenceStatus] = useState([]);
 
   useEffect(() => {
@@ -46,9 +49,26 @@ const Dashboard = () => {
               ...item,
               currentWeight: data.weight,
               status: data.status,
-              wearStatus: data.wearStatus,
-              isWorn: data.isWorn,
-              lastReading: new Date()
+              wearStatus: data.wearStatus || item.wearStatus,
+              isWorn: data.isWorn !== undefined ? data.isWorn : item.isWorn,
+              lastReading: data.timestamp || new Date()
+            };
+          }
+          return item;
+        })
+      );
+    });
+
+    // Listen for status updates
+    socket.on('status_update', (data) => {
+      console.log('Dashboard: Received status update', data);
+      setItems(prevItems =>
+        prevItems.map(item => {
+          if (item._id === data.itemId || item.deviceId === data.deviceId) {
+            return {
+              ...item,
+              status: data.status,
+              lastReading: data.timestamp || new Date()
             };
           }
           return item;
@@ -77,6 +97,7 @@ const Dashboard = () => {
 
     return () => {
       socket.off('weight_update');
+      socket.off('status_update');
       socket.off('geofence-update');
       socket.off('item-update');
     };
@@ -84,13 +105,19 @@ const Dashboard = () => {
 
   const fetchItems = async () => {
     try {
+      setRefreshing(true);
       const response = await api.get('/items');
       setItems(response.data);
     } catch (error) {
       console.error('Error fetching items:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    fetchItems();
   };
 
   const getStatusColor = (status) => {
@@ -142,6 +169,16 @@ const Dashboard = () => {
 
   return (
     <Layout>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 500 }}>
+          Dashboard
+        </Typography>
+        <Tooltip title="Refresh items">
+          <IconButton onClick={handleRefresh} disabled={refreshing}>
+            <Refresh sx={{ transform: refreshing ? 'rotate(360deg)' : 'none', transition: 'transform 1s' }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <Grid container spacing={3}>
         {items.length === 0 ? (
           <Grid item xs={12}>

@@ -2,25 +2,24 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Paper,
   TextField,
   Button,
   Grid,
   Switch,
   FormControlLabel,
-  Divider,
   Alert,
-  Chip
+  Card,
+  CardContent
 } from '@mui/material';
-import { LocationOn, GpsFixed } from '@mui/icons-material';
+import { Person, NotificationsActive, Info } from '@mui/icons-material';
 import Layout from '../components/Layout';
+import LocationTracker from '../components/LocationTracker';
 import api from '../services/api';
-import { useSocket } from '../context/SocketContext';
 import { useAuth } from '../context/AuthContext';
 
 const Settings = () => {
-  const { socket } = useSocket();
   const { user } = useAuth();
+  
   const [profile, setProfile] = useState({
     username: '',
     email: '',
@@ -29,43 +28,38 @@ const Settings = () => {
     phoneNumber: ''
   });
   const [notifications, setNotifications] = useState({
-    email: true
+    email: false
   });
-  const [isTracking, setIsTracking] = useState(false);
-  const [watchId, setWatchId] = useState(null);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [accuracy, setAccuracy] = useState(null);
-  const [locationError, setLocationError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Add debugging
   useEffect(() => {
-    fetchProfile();
-    
-    // Check if tracking was previously enabled
-    const savedTracking = localStorage.getItem('locationTrackingEnabled') === 'true';
-    if (savedTracking) {
-      setIsTracking(true);
-      startTracking();
+    console.log('Settings: Component mounted, user:', user);
+    if (user) {
+      fetchProfile();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
-  useEffect(() => {
-    if (!socket || !user) return;
-
-    // Authenticate socket for location tracking
-    socket.emit('authenticate', { userId: user.id });
-
-    // Request notification permission
-    if (Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, [socket, user]);
+  // Add early return after hooks for safety
+  if (!user) {
+    return (
+      <Layout>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+            Settings
+          </Typography>
+          <Alert severity="info">Please log in to access settings.</Alert>
+        </Box>
+      </Layout>
+    );
+  }
 
   const fetchProfile = async () => {
     try {
+      console.log('Settings: Fetching profile...');
       const response = await api.get('/users/me');
+      console.log('Settings: Profile response:', response.data);
       setProfile({
         username: response.data.username,
         email: response.data.email,
@@ -73,9 +67,10 @@ const Settings = () => {
         lastName: response.data.lastName || '',
         phoneNumber: response.data.phoneNumber || ''
       });
-      setNotifications(response.data.notifications);
+      setNotifications(response.data.notifications || { email: true });
     } catch (error) {
       console.error('Error fetching profile:', error);
+      setMessage('Failed to load profile');
     }
   };
 
@@ -124,312 +119,266 @@ const Settings = () => {
     }
   };
 
-  const startTracking = () => {
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation is not supported by this browser');
-      return;
-    }
-
-    setLocationError(null);
-
-    // Variables for smoothing
-    let positionHistory = [];
-    const HISTORY_SIZE = 5; // Average of last 5 positions
-    const MIN_MOVEMENT_THRESHOLD = 10; // Minimum 10 meters to update
-    let lastUpdateTime = 0;
-    const MIN_UPDATE_INTERVAL = 3000; // Minimum 3 seconds between updates
-
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 30000, // Increased timeout to 30 seconds
-      maximumAge: 10000 // Allow cached positions up to 10 seconds old
-    };
-
-    // Helper function to calculate distance between two points (Haversine formula)
-    const calculateDistance = (lat1, lon1, lat2, lon2) => {
-      const R = 6371e3; // Earth's radius in meters
-      const φ1 = lat1 * Math.PI / 180;
-      const φ2 = lat2 * Math.PI / 180;
-      const Δφ = (lat2 - lat1) * Math.PI / 180;
-      const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-      const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                Math.cos(φ1) * Math.cos(φ2) *
-                Math.sin(Δλ/2) * Math.sin(Δλ/2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-      return R * c; // Distance in meters
-    };
-
-    const id = navigator.geolocation.watchPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        const now = Date.now();
-        
-        // Add to history
-        positionHistory.push({ latitude, longitude, accuracy });
-        
-        // Keep only recent positions
-        if (positionHistory.length > HISTORY_SIZE) {
-          positionHistory.shift();
-        }
-
-        // Calculate smoothed position (average of recent positions)
-        const smoothedLat = positionHistory.reduce((sum, pos) => sum + pos.latitude, 0) / positionHistory.length;
-        const smoothedLon = positionHistory.reduce((sum, pos) => sum + pos.longitude, 0) / positionHistory.length;
-        const avgAccuracy = positionHistory.reduce((sum, pos) => sum + pos.accuracy, 0) / positionHistory.length;
-
-        // Only update if we've moved significantly or don't have a current location
-        let shouldUpdate = !currentLocation;
-        
-        if (currentLocation && now - lastUpdateTime > MIN_UPDATE_INTERVAL) {
-          const distance = calculateDistance(
-            currentLocation.latitude,
-            currentLocation.longitude,
-            smoothedLat,
-            smoothedLon
-          );
-          
-          // Update if moved more than threshold OR accuracy improved significantly
-          shouldUpdate = distance > MIN_MOVEMENT_THRESHOLD || (accuracy < 20 && accuracy < avgAccuracy / 2);
-        }
-
-        if (shouldUpdate) {
-          lastUpdateTime = now;
-          setCurrentLocation({ latitude: smoothedLat, longitude: smoothedLon });
-          setAccuracy(avgAccuracy);
-          
-          // Send location to backend
-          if (socket) {
-            socket.emit('location-update', {
-              latitude: smoothedLat,
-              longitude: smoothedLon,
-              accuracy: avgAccuracy,
-              timestamp: new Date().toISOString()
-            });
-          }
-        }
-      },
-      (error) => {
-        console.warn('Location error:', error);
-        // Don't disable tracking on timeout errors
-        if (error.code !== error.TIMEOUT) {
-          setLocationError(`Location error: ${error.message}`);
-          setIsTracking(false);
-          localStorage.setItem('locationTrackingEnabled', 'false');
-        }
-      },
-      options
-    );
-
-    setWatchId(id);
-  };
-
-  const stopTracking = () => {
-    if (watchId) {
-      navigator.geolocation.clearWatch(watchId);
-      setWatchId(null);
-    }
-    setCurrentLocation(null);
-    setAccuracy(null);
-  };
-
-  const handleTrackingToggle = (event) => {
-    const enabled = event.target.checked;
-    setIsTracking(enabled);
-    localStorage.setItem('locationTrackingEnabled', enabled.toString());
-    
-    if (enabled) {
-      startTracking();
-    } else {
-      stopTracking();
-    }
-  };
-
-  return (
-    <Layout>
-      <Typography variant="h5" sx={{ fontWeight: 500, mb: 2 }}>
-        Settings
-      </Typography>
-
-      {message && (
-        <Box sx={{ mb: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
-          <Typography>{message}</Typography>
+  // Add early return if no user (debugging)
+  if (!user) {
+    return (
+      <Layout>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+            Settings
+          </Typography>
+          <Alert severity="warning">
+            Please log in to access settings.
+          </Alert>
         </Box>
-      )}
+      </Layout>
+    );
+  }
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Profile Information
-            </Typography>
-            <form onSubmit={handleUpdateProfile}>
-              <TextField
-                fullWidth
-                label="Username"
-                name="username"
-                value={profile.username}
-                margin="normal"
-                disabled
-              />
-              <TextField
-                fullWidth
-                label="Email"
-                name="email"
-                type="email"
-                value={profile.email}
-                onChange={handleProfileChange}
-                margin="normal"
-                required
-              />
-              <TextField
-                fullWidth
-                label="First Name"
-                name="firstName"
-                value={profile.firstName}
-                onChange={handleProfileChange}
-                margin="normal"
-              />
-              <TextField
-                fullWidth
-                label="Last Name"
-                name="lastName"
-                value={profile.lastName}
-                onChange={handleProfileChange}
-                margin="normal"
-              />
-              <TextField
-                fullWidth
-                label="Phone Number"
-                name="phoneNumber"
-                value={profile.phoneNumber}
-                onChange={handleProfileChange}
-                margin="normal"
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                sx={{ mt: 2 }}
-                disabled={loading}
-              >
-                Update Profile
-              </Button>
-            </form>
-          </Paper>
-        </Grid>
+  console.log('Settings: Rendering for user:', user.id || 'unknown');
 
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Notification Preferences
-            </Typography>
-            <Box sx={{ mt: 2 }}>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={notifications.email}
-                    onChange={handleNotificationChange}
-                    name="email"
-                  />
-                }
-                label="Email Notifications"
-              />
-            </Box>
-            <Button
-              variant="contained"
-              sx={{ mt: 3 }}
-              onClick={handleUpdateNotifications}
-              disabled={loading}
-            >
-              Update Preferences
-            </Button>
-          </Paper>
+  try {
+    return (
+      <Layout>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+            Settings
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Manage your profile, notifications, and location tracking preferences
+          </Typography>
+        </Box>
 
-          <Paper sx={{ p: 3, mt: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              📍 Location Tracking
-            </Typography>
-            <Divider sx={{ my: 2 }} />
-            
-            {locationError && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {locationError}
-              </Alert>
-            )}
+        {message && (
+          <Alert 
+            severity={message.includes('Error') ? 'error' : 'success'} 
+            sx={{ mb: 3 }}
+            onClose={() => setMessage('')}
+          >
+            {message}
+          </Alert>
+        )}
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={isTracking}
-                  onChange={handleTrackingToggle}
-                  color="primary"
+        <Grid container spacing={3}>
+          {/* Profile Settings */}
+          <Grid item xs={12} lg={6}>
+            <Card>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <Person sx={{ mr: 2, color: 'primary.main' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Profile Information
+                  </Typography>
+                </Box>
+                
+                <Box component="form" onSubmit={handleUpdateProfile}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Username"
+                        name="username"
+                        value={profile?.username || ''}
+                        disabled
+                        variant="outlined"
+                        size="small"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Email"
+                        name="email"
+                        type="email"
+                        value={profile?.email || ''}
+                        onChange={handleProfileChange}
+                        required
+                        variant="outlined"
+                        size="small"
+                      />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField
+                        fullWidth
+                        label="First Name"
+                        name="firstName"
+                        value={profile?.firstName || ''}
+                        onChange={handleProfileChange}
+                        variant="outlined"
+                        size="small"
+                      />
+                    </Grid>
+                    <Grid item xs={6}>
+                      <TextField
+                        fullWidth
+                        label="Last Name"
+                        name="lastName"
+                        value={profile?.lastName || ''}
+                        onChange={handleProfileChange}
+                        variant="outlined"
+                        size="small"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        label="Phone Number"
+                        name="phoneNumber"
+                        value={profile?.phoneNumber || ''}
+                        onChange={handleProfileChange}
+                        variant="outlined"
+                        size="small"
+                      />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button
+                        type="submit"
+                        variant="contained"
+                        disabled={loading}
+                        sx={{ mt: 1 }}
+                      >
+                        {loading ? 'Updating...' : 'Update Profile'}
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Box>
+              </CardContent>
+            </Card>
+
+            {/* Notifications Settings */}
+            <Card sx={{ mt: 3 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <NotificationsActive sx={{ mr: 2, color: 'primary.main' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Notification Preferences
+                  </Typography>
+                </Box>
+                
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notifications?.email || false}
+                      onChange={handleNotificationChange}
+                      name="email"
+                    />
+                  }
+                  label="Email Notifications for Item Alerts"
+                  sx={{ mb: 2 }}
                 />
-              }
-              label={
-                <Box>
-                  <Typography variant="body1">
-                    Enable GPS Tracking
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Track your location for geofence alerts
+                
+                <Button
+                  variant="contained"
+                  onClick={handleUpdateNotifications}
+                  disabled={loading}
+                  size="small"
+                >
+                  {loading ? 'Updating...' : 'Update Preferences'}
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Location Tracking */}
+          <Grid item xs={12} lg={6}>
+            <LocationTracker />
+
+            {/* Mobile Location Options */}
+            <Card sx={{ mt: 3 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    📱 Alternative Location Methods
                   </Typography>
                 </Box>
-              }
-            />
+                
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  If browser location is inaccurate due to poor network, try these alternatives:
+                </Alert>
 
-            {isTracking && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'success.light', borderRadius: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <GpsFixed color="success" />
-                  <Chip label="Tracking Active" color="success" size="small" />
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      onClick={() => {
+                        const shareLink = `${window.location.origin}/api/location/share/phone-${user?.id}-${Date.now()}`;
+                        navigator.clipboard.writeText(shareLink);
+                        setMessage('Phone link copied! Open this on your phone: ' + shareLink);
+                      }}
+                    >
+                      📱 Generate Phone Link
+                    </Button>
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      onClick={() => {
+                        const lat = prompt('Enter Latitude (e.g. 59.329323):');
+                        const lon = prompt('Enter Longitude (e.g. 18.068581):');
+                        if (lat && lon) {
+                          api.post('/location/manual-location', {
+                            coordinates: { latitude: parseFloat(lat), longitude: parseFloat(lon) }
+                          }).then(() => {
+                            setMessage('Manual location set successfully!');
+                          }).catch(() => {
+                            setMessage('Error: Failed to set manual location');
+                          });
+                        }
+                      }}
+                    >
+                      ✏️ Set Manual Location
+                    </Button>
+                  </Grid>
+                </Grid>
+
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  💡 Phone link provides better GPS accuracy. Manual entry works when network is poor.
+                </Typography>
+              </CardContent>
+            </Card>
+
+            {/* App Information */}
+            <Card sx={{ mt: 3 }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <Info sx={{ mr: 2, color: 'primary.main' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    About ItemReminder IoT
+                  </Typography>
                 </Box>
-                {currentLocation && (
-                  <>
-                    <Typography variant="body2">
-                      <LocationOn fontSize="small" sx={{ verticalAlign: 'middle' }} />
-                      {' '}Latitude: {currentLocation.latitude.toFixed(6)}
-                    </Typography>
-                    <Typography variant="body2">
-                      <LocationOn fontSize="small" sx={{ verticalAlign: 'middle' }} />
-                      {' '}Longitude: {currentLocation.longitude.toFixed(6)}
-                    </Typography>
-                    {accuracy && (
-                      <Typography variant="caption" color="text.secondary">
-                        Accuracy: ±{Math.round(accuracy)}m
-                      </Typography>
-                    )}
-                  </>
-                )}
-              </Box>
-            )}
-
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-              💡 Location tracking runs in the background and enables geofence alerts when you enter or leave configured areas.
-            </Typography>
-          </Paper>
-
-          <Paper sx={{ p: 3, mt: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              About
-            </Typography>
-            <Divider sx={{ my: 2 }} />
-            <Typography variant="body2" color="text.secondary" paragraph>
-              <strong>IoT Item Reminder</strong>
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              Version 1.0.0
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              A smart, location-aware reminder system for tracking items like
-              medications, groceries, and supplies using ESP32, MQTT, and
-              real-time notifications.
-            </Typography>
-          </Paper>
+                
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  <strong>Version:</strong> 1.0.0
+                </Typography>
+                
+                <Typography variant="body2" color="text.secondary">
+                  A smart, location-aware reminder system for tracking items like
+                  medications, groceries, and supplies using ESP32, MQTT, and
+                  real-time notifications.
+                </Typography>
+              </CardContent>
+            </Card>
+          </Grid>
         </Grid>
-      </Grid>
-    </Layout>
-  );
+      </Layout>
+    );
+  } catch (error) {
+    console.error('Settings: Render error:', error);
+    return (
+      <Layout>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+            Settings
+          </Typography>
+          <Alert severity="error">
+            Error loading settings page. Please refresh and try again.
+          </Alert>
+        </Box>
+      </Layout>
+    );
+  }
 };
 
 export default Settings;

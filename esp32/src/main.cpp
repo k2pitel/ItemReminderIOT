@@ -6,8 +6,13 @@
 
 // ==================== CONFIGURATION ====================
 // WiFi Configuration
-const char* ssid = "Aura_Fiber_82031";
-const char* password = "Rn2NGnZWEK2S";
+// Option 1: Use your university WiFi (if available for devices)
+// const char* ssid = "your-wifi-name";
+// const char* password = "your-wifi-password";
+
+// Option 2: Use mobile hotspot (current setup)
+const char* ssid = "AndroidAP470C";
+const char* password = "Andre1234";
 
 // MQTT Configuration
 // MQTT broker host for the ESP32. This must be reachable from the ESP32's
@@ -15,7 +20,7 @@ const char* password = "Rn2NGnZWEK2S";
 // hostnames here unless the ESP32 is on the same Docker network.
 // You can override this at compile-time by defining MQTT_BROKER_HOST.
 #ifndef MQTT_BROKER_HOST
-#define MQTT_BROKER_HOST "192.168.0.50"
+#define MQTT_BROKER_HOST "192.168.229.112"
 #endif
 const char* mqtt_server = MQTT_BROKER_HOST;     // MQTT broker host (reachable from ESP32)
 const int mqtt_port = 1883;
@@ -173,30 +178,38 @@ void publishStatus(const char* status);
 void reconnect() {
   if (!MQTT_ENABLED) return;
 
-  while (!client.connected()) {
+  static int retryCount = 0;
+  const int maxRetries = 5;
+
+  while (!client.connected() && retryCount < maxRetries) {
     Serial.print("Attempting MQTT connection to ");
     Serial.print(mqtt_server);
-    Serial.print("...");
+    Serial.print(" (attempt ");
+    Serial.print(retryCount + 1);
+    Serial.print("/");
+    Serial.print(maxRetries);
+    Serial.print(")...");
 
-    // Try to resolve hostname to IP (useful when mqtt_server is a DNS name)
-    IPAddress brokerIp;
-    bool resolved = false;
-    if (WiFi.hostByName(mqtt_server, brokerIp)) {
-      Serial.print(" resolved to ");
-      Serial.println(brokerIp);
-      // Use IP-based connection (some networks have DNS issues from ESP)
-      client.setServer(brokerIp, mqtt_port);
-      resolved = true;
-    } else {
-      Serial.println();
-      Serial.println("[MQTT] DNS lookup failed or not needed; will use hostname as-is");
-      // Ensure server is set using original host string
-      client.setServer(mqtt_server, mqtt_port);
+    // Always set the server (in case it wasn't set before)
+    client.setServer(mqtt_server, mqtt_port);
+    
+    // Check WiFi status first
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println(" WiFi disconnected! Reconnecting...");
+      setup_wifi();
+      delay(1000);
+      continue;
     }
+    
+    Serial.print(" from IP ");
+    Serial.print(WiFi.localIP());
 
+    
     // Create a unique client ID
     String clientId = "ESP32_";
     clientId += device_id;
+    clientId += "_";
+    clientId += random(0xffff);
 
     bool connected;
     if (strlen(mqtt_user) > 0) {
@@ -221,13 +234,16 @@ void reconnect() {
 
     if (connected) {
       Serial.println(" connected!");
+      retryCount = 0; // Reset retry count on success
 
       // Subscribe to command topics for remote configuration
       subscribeToCommandTopics();
 
       // Publish online status
       publishStatus("online");
+      return; // Exit the function on success
     } else {
+      retryCount++;
       int st = client.state();
       Serial.print(" failed, rc=");
       Serial.print(st);
@@ -238,18 +254,28 @@ void reconnect() {
         case -3: Serial.print("MQTT_CONNECTION_LOST"); break;
         case -2: Serial.print("MQTT_CONNECT_FAILED"); break;
         case -1: Serial.print("MQTT_DISCONNECTED"); break;
+        case 1: Serial.print("MQTT_CONNECT_BAD_PROTOCOL"); break;
+        case 2: Serial.print("MQTT_CONNECT_BAD_CLIENT_ID"); break;
+        case 3: Serial.print("MQTT_CONNECT_UNAVAILABLE"); break;
+        case 4: Serial.print("MQTT_CONNECT_BAD_CREDENTIALS"); break;
+        case 5: Serial.print("MQTT_CONNECT_UNAUTHORIZED"); break;
         default: Serial.print("UNKNOWN"); break;
       }
-      Serial.println(") | Retry in 5 seconds...");
-      // Print useful diagnostics
-      Serial.print("[MQTT] Local IP: ");
-      Serial.println(WiFi.localIP());
-      if (!resolved) {
-        Serial.print("[MQTT] Broker host: ");
-        Serial.println(mqtt_server);
+      Serial.print(") | Retry ");
+      Serial.print(retryCount);
+      Serial.print("/");
+      Serial.println(maxRetries);
+      
+      if (retryCount < maxRetries) {
+        Serial.println("[MQTT] Waiting 3 seconds before retry...");
+        delay(3000);
       }
-      delay(5000);
     }
+  }
+  
+  if (retryCount >= maxRetries) {
+    Serial.println("[MQTT] Max retries reached. Will try again in main loop.");
+    retryCount = 0; // Reset for next time
   }
 }
 
@@ -574,11 +600,12 @@ void loop() {
     setup_wifi();
   }
 
-  // Maintain MQTT connection
-  if (MQTT_ENABLED) {
-    if (!client.connected()) {
-      reconnect();
-    }
+  // Maintain MQTT connection - try reconnecting if disconnected
+  if (MQTT_ENABLED && !client.connected()) {
+    reconnect();
+  }
+  
+  if (MQTT_ENABLED && client.connected()) {
     client.loop();
   }
 
@@ -590,7 +617,12 @@ void loop() {
     if (scale.is_ready()) {
       float previous_weight = current_weight;
       current_weight = readWeight();
-      publishWeight(current_weight, previous_weight);
+      
+      if (MQTT_ENABLED && client.connected()) {
+        publishWeight(current_weight, previous_weight);
+      } else if (MQTT_ENABLED) {
+        Serial.println("[WARN] MQTT not connected, skipping weight publish");
+      }
     } else {
       Serial.println("[WARN] HX711 not ready, skipping reading");
     }

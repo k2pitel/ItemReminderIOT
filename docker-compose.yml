@@ -41,6 +41,7 @@ services:
       MQTT_BROKER: mqtt://mosquitto:1883
       JWT_SECRET: your-super-secret-jwt-key-change-this
       FRONTEND_URL: http://localhost:3000
+      DEBUG_ALLOW: 'true'
     ports:
       - "5000:5000"
     depends_on:

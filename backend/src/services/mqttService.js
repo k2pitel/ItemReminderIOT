@@ -215,9 +215,9 @@ class MqttService {
       });
       await reading.save();
 
-      // Emit real-time update
+      // Emit real-time update to the specific user who owns this item
       if (this.io) {
-        this.io.emit('weight_update', {
+        const updateData = {
           itemId: item._id,
           deviceId: device_id,
           weight,
@@ -225,7 +225,15 @@ class MqttService {
           wearStatus: item.wearStatus,
           isWorn: item.isWorn,
           timestamp: new Date()
-        });
+        };
+        
+        // Emit to specific user's room
+        this.io.to(`user-${item.userId}`).emit('weight_update', updateData);
+        
+        // Also emit globally for backwards compatibility
+        this.io.emit('weight_update', updateData);
+        
+        logger.info(`Emitted weight update for item ${item.name} to user ${item.userId}:`, updateData);
       }
 
       // Check for alerts - use item.status which was calculated above
@@ -273,14 +281,22 @@ class MqttService {
           }
         }
 
-        // Emit real-time update
+        // Emit real-time update to the specific user who owns this item
         if (this.io) {
-          this.io.emit('status_update', {
+          const statusData = {
             itemId: item._id,
             deviceId: device_id,
             status,
             timestamp: new Date()
-          });
+          };
+          
+          // Emit to specific user's room
+          this.io.to(`user-${item.userId}`).emit('status_update', statusData);
+          
+          // Also emit globally for backwards compatibility
+          this.io.emit('status_update', statusData);
+          
+          logger.info(`Emitted status update for item ${item.name} to user ${item.userId}:`, statusData);
         }
       }
     } catch (error) {

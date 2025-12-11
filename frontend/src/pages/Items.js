@@ -27,8 +27,10 @@ import {
 import { Edit, Delete, Add } from '@mui/icons-material';
 import Layout from '../components/Layout';
 import api from '../services/api';
+import { useSocket } from '../context/SocketContext';
 
 const Items = () => {
+  const { socket } = useSocket();
   const [items, setItems] = useState([]);
   const [geofences, setGeofences] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -53,6 +55,35 @@ const Items = () => {
     fetchItems();
     fetchGeofences();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    // Listen for real-time weight updates
+    socket.on('weight_update', (data) => {
+      console.log('Items: Received weight update', data);
+      setItems(prevItems =>
+        prevItems.map(item => {
+          // Match by itemId or deviceId
+          if (item._id === data.itemId || item.deviceId === data.deviceId) {
+            return {
+              ...item,
+              currentWeight: data.weight,
+              status: data.status,
+              wearStatus: data.wearStatus,
+              isWorn: data.isWorn,
+              lastReading: new Date()
+            };
+          }
+          return item;
+        })
+      );
+    });
+
+    return () => {
+      socket.off('weight_update');
+    };
+  }, [socket]);
 
   const fetchItems = async () => {
     try {

@@ -87,14 +87,27 @@ const LocationTracker = () => {
 
   // Validate and smooth location updates to filter out erratic jumps
   const processLocationUpdate = (newLat, newLon, newAccuracy) => {
-    const MAX_JUMP_DISTANCE = 500; // Maximum realistic movement in meters between updates
-    const MIN_ACCURACY = 500; // Accept locations with accuracy up to 500m (laptop WiFi location)
-    const BUFFER_SIZE = 3; // Keep last 3 readings for smoothing
+    const MAX_JUMP_DISTANCE = 1000; // Increased for more realistic movement detection
+    const MIN_ACCURACY_GPS = 50; // Tight requirement for GPS readings
+    const MIN_ACCURACY_NETWORK = 1000; // More lenient for network when GPS unavailable
+    const BUFFER_SIZE = 5; // More readings for better smoothing
     
-    // Reject very inaccurate readings
-    if (newAccuracy > MIN_ACCURACY) {
-      console.log(`LocationTracker: Rejecting inaccurate location (accuracy: ${newAccuracy}m)`);
+    // Reject extremely inaccurate readings (like 146km accuracy)
+    if (newAccuracy > 50000) { // 50km is clearly unusable
+      console.log(`LocationTracker: Rejecting extremely inaccurate location (accuracy: ${(newAccuracy/1000).toFixed(1)}km)`);
       return null;
+    }
+    
+    // For high accuracy readings, be strict
+    if (newAccuracy > MIN_ACCURACY_GPS) {
+      // If we're getting network-level accuracy, still try to use it but warn user
+      if (newAccuracy < MIN_ACCURACY_NETWORK) {
+        console.log(`LocationTracker: Using network-based location (accuracy: ${newAccuracy.toFixed(0)}m) - consider moving outdoors for GPS`);
+        // Don't reject, but mark as network positioning
+      } else {
+        console.log(`LocationTracker: Rejecting inaccurate location (accuracy: ${newAccuracy.toFixed(0)}m > ${MIN_ACCURACY_NETWORK}m threshold)`);
+        return null;
+      }
     }
 
     // If we have a previous location, check if the jump is realistic
@@ -107,14 +120,19 @@ const LocationTracker = () => {
       );
 
       // If the jump is too large and the accuracy is poor, it's likely a glitch
-      if (distance > MAX_JUMP_DISTANCE && newAccuracy > 30) {
+      if (distance > MAX_JUMP_DISTANCE && newAccuracy > 20) {
         console.log(`LocationTracker: Rejecting suspicious jump of ${distance.toFixed(0)}m with accuracy ${newAccuracy.toFixed(0)}m`);
         return null;
       }
 
       // If jump is large but accuracy is good, it might be legitimate (e.g., user is in a car)
-      if (distance > MAX_JUMP_DISTANCE && newAccuracy <= 30) {
+      if (distance > MAX_JUMP_DISTANCE && newAccuracy <= 20) {
         console.log(`LocationTracker: Accepting large jump of ${distance.toFixed(0)}m due to good accuracy (${newAccuracy.toFixed(0)}m)`);
+      }
+      
+      // For moderate jumps, check if accuracy is improving
+      if (distance > 200 && distance <= MAX_JUMP_DISTANCE) {
+        console.log(`LocationTracker: Moderate movement of ${distance.toFixed(0)}m detected with ${newAccuracy.toFixed(0)}m accuracy`);
       }
     }
 
@@ -125,20 +143,28 @@ const LocationTracker = () => {
     }
     setLocationBuffer(newBuffer);
 
-    // Calculate weighted average (more weight to more accurate readings)
+    // Improved weighted average - less aggressive smoothing for better responsiveness
     let totalWeight = 0;
     let weightedLat = 0;
     let weightedLon = 0;
 
-    newBuffer.forEach(loc => {
-      const weight = 1 / (loc.accuracy + 1); // Lower accuracy = lower weight
-      totalWeight += weight;
-      weightedLat += loc.latitude * weight;
-      weightedLon += loc.longitude * weight;
+    // Give much more weight to recent readings and high accuracy
+    newBuffer.forEach((loc, index) => {
+      const recencyWeight = (index + 1) / newBuffer.length; // More weight to recent readings
+      const accuracyWeight = Math.min(50, 1 / (loc.accuracy + 1)); // Cap accuracy weight to prevent over-weighting
+      const combinedWeight = recencyWeight * accuracyWeight * 10; // Scale up for better precision
+      
+      totalWeight += combinedWeight;
+      weightedLat += loc.latitude * combinedWeight;
+      weightedLon += loc.longitude * combinedWeight;
     });
 
     const smoothedLat = weightedLat / totalWeight;
     const smoothedLon = weightedLon / totalWeight;
+
+    // Debug logging to help diagnose accuracy issues
+    const smoothingOffset = calculateDistance(newLat, newLon, smoothedLat, smoothedLon);
+    console.log(`LocationTracker: Raw: ${newLat.toFixed(6)}, ${newLon.toFixed(6)} (${newAccuracy.toFixed(1)}m) → Smoothed: ${smoothedLat.toFixed(6)}, ${smoothedLon.toFixed(6)} (offset: ${smoothingOffset.toFixed(1)}m)`);
 
     setPreviousLocation({ latitude: newLat, longitude: newLon });
 
@@ -151,6 +177,9 @@ const LocationTracker = () => {
 
   const startTracking = async () => {
     console.log('LocationTracker: Starting tracking...');
+    console.log('LocationTracker: Geolocation support:', !!navigator.geolocation);
+    console.log('LocationTracker: User available:', !!user);
+    console.log('LocationTracker: Socket available:', !!socket);
     
     if (!navigator.geolocation) {
       console.error('LocationTracker: Geolocation not supported');
@@ -158,120 +187,324 @@ const LocationTracker = () => {
       return;
     }
 
+    // Check current permission state
+    if (navigator.permissions) {
+      try {
+        const permissionStatus = await navigator.permissions.query({name: 'geolocation'});
+        console.log('LocationTracker: Current geolocation permission:', permissionStatus.state);
+        if (permissionStatus.state === 'denied') {
+          setError('Location access is blocked. Please enable location permissions in your browser settings.');
+          return;
+        }
+      } catch (e) {
+        console.log('LocationTracker: Could not check permission status:', e);
+      }
+    }
+
     // Request notification permission
     if (Notification.permission === 'default') {
       console.log('LocationTracker: Requesting notification permission...');
-      await Notification.requestPermission();
+      const notificationPermission = await Notification.requestPermission();
+      console.log('LocationTracker: Notification permission result:', notificationPermission);
     }
 
     console.log('LocationTracker: Socket connected?', !!socket);
     setError(null);
     setIsTracking(true);
 
-    // Optimized geolocation options - use GPS for high accuracy
-    const options = {
-      enableHighAccuracy: true, // Use GPS for high accuracy
-      timeout: 15000, // 15 seconds timeout
-      maximumAge: 5000 // Allow cached positions up to 5 seconds old
-    };
-
-    console.log('LocationTracker: Starting location tracking with network-based positioning');
+    console.log('LocationTracker: Starting location tracking with enhanced GPS strategy');
 
     const BACKEND_UPDATE_INTERVAL = 5000; // Send to backend every 5 seconds max
 
-    // Try to get initial position immediately
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        console.log('LocationTracker: Got initial location', { latitude, longitude, accuracy });
-        
-        // For initial position, always accept it (no previous location to compare)
-        setCurrentLocation({ latitude, longitude });
-        setPreviousLocation({ latitude, longitude });
-        setLocationBuffer([{ latitude, longitude, accuracy }]);
-        setAccuracy(accuracy);
-        setError(null);
-        setLastLocationUpdate(new Date());
-        
-        if (socket) {
-          socket.emit('location-update', {
-            latitude,
-            longitude,
-            accuracy,
-            timestamp: new Date().toISOString()
-          });
-          lastBackendUpdateRef.current = Date.now();
-        }
-      },
-      (error) => {
-        console.warn('LocationTracker: Could not get initial position', error);
-        setError('Getting initial location...');
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 10000 } // Quick initial fix with GPS
-    );
+    // Enhanced strategy: Multiple GPS attempts with different configurations
+    const tryInitialPosition = async () => {
+      // Ultra-high accuracy attempt (for outdoor use)
+      const ultraHighAccuracyOptions = {
+        enableHighAccuracy: true,
+        timeout: 15000, // Longer timeout for GPS lock
+        maximumAge: 0 // Force fresh position
+      };
 
-    // Start continuous tracking
-    const id = navigator.geolocation.watchPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        
-        console.log('LocationTracker: Raw location update', { latitude, longitude, accuracy });
-        
-        // Process and validate the location update
-        const processedLocation = processLocationUpdate(latitude, longitude, accuracy);
-        
-        if (!processedLocation) {
-          console.log('LocationTracker: Location update rejected by filter');
-          return; // Skip this update
-        }
-        
-        console.log('LocationTracker: Smoothed location', processedLocation);
-        setCurrentLocation({ 
-          latitude: processedLocation.latitude, 
-          longitude: processedLocation.longitude 
+      // High accuracy attempt
+      const highAccuracyOptions = {
+        enableHighAccuracy: true,
+        timeout: 12000,
+        maximumAge: 5000
+      };
+
+      // Network positioning fallback
+      const networkOptions = {
+        enableHighAccuracy: false,
+        timeout: 20000, 
+        maximumAge: 30000
+      };
+
+      // Try ultra-high accuracy first (for when outdoors with clear sky)
+      console.log('LocationTracker: Attempting ultra-high accuracy GPS...');
+      try {
+        await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const { latitude, longitude, accuracy } = position.coords;
+              console.log('LocationTracker: Got ultra-high-accuracy initial location', { latitude, longitude, accuracy });
+              
+              if (accuracy > 100) {
+                console.log('LocationTracker: Ultra-high accuracy too poor, will try fallback');
+                reject(new Error(`Accuracy too poor: ${accuracy}m`));
+                return;
+              }
+              
+              setCurrentLocation({ latitude, longitude });
+              setPreviousLocation({ latitude, longitude });
+              setLocationBuffer([{ latitude, longitude, accuracy }]);
+              setAccuracy(accuracy);
+              setError(null);
+              setLastLocationUpdate(new Date());
+              
+              if (socket) {
+                socket.emit('location-update', {
+                  latitude,
+                  longitude,
+                  accuracy,
+                  timestamp: new Date().toISOString()
+                });
+                lastBackendUpdateRef.current = Date.now();
+              }
+              resolve();
+            },
+            reject,
+            ultraHighAccuracyOptions
+          );
         });
-        setAccuracy(processedLocation.accuracy);
-        setError(null); // Clear any previous errors
-        setLastLocationUpdate(new Date());
+        console.log('LocationTracker: Ultra-high-accuracy positioning successful');
+        return true;
+      } catch (error) {
+        console.warn('LocationTracker: Ultra-high-accuracy failed:', error.message, 'trying standard GPS...');
+        setError('Trying GPS positioning...');
+      }
+      
+      // Second try: Standard high accuracy GPS
+      console.log('LocationTracker: Attempting standard GPS...');
+      try {
+        await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              const { latitude, longitude, accuracy } = position.coords;
+              console.log('LocationTracker: Got high-accuracy initial location', { latitude, longitude, accuracy });
+              
+              setCurrentLocation({ latitude, longitude });
+              setPreviousLocation({ latitude, longitude });
+              setLocationBuffer([{ latitude, longitude, accuracy }]);
+              setAccuracy(accuracy);
+              setError('GPS positioning active');
+              setLastLocationUpdate(new Date());
+              
+              if (socket) {
+                socket.emit('location-update', {
+                  latitude,
+                  longitude,
+                  accuracy,
+                  timestamp: new Date().toISOString()
+                });
+                lastBackendUpdateRef.current = Date.now();
+              }
+              resolve();
+            },
+            reject,
+            highAccuracyOptions
+          );
+        });
+        console.log('LocationTracker: High-accuracy positioning successful');
+        return true;
+      } catch (error) {
+        console.warn('LocationTracker: High-accuracy failed:', error.message, 'trying network positioning...');
+        setError('GPS failed, trying network positioning...');
         
-        // Send location to backend with debouncing
-        const now = Date.now();
-        if (socket && (now - lastBackendUpdateRef.current >= BACKEND_UPDATE_INTERVAL)) {
-          console.log('LocationTracker: Sending location to backend');
-          socket.emit('location-update', {
-            latitude: processedLocation.latitude,
-            longitude: processedLocation.longitude,
-            accuracy: processedLocation.accuracy,
-            timestamp: new Date().toISOString()
+        // Third try: Network-based positioning
+        console.log('LocationTracker: Attempting network positioning...');
+        try {
+          await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const { latitude, longitude, accuracy } = position.coords;
+                console.log('LocationTracker: Got network-based initial location', { latitude, longitude, accuracy });
+                
+                setCurrentLocation({ latitude, longitude });
+                setPreviousLocation({ latitude, longitude });
+                setLocationBuffer([{ latitude, longitude, accuracy }]);
+                setAccuracy(accuracy);
+                setError('Using network positioning (less accurate)');
+                setLastLocationUpdate(new Date());
+                
+                if (socket) {
+                  socket.emit('location-update', {
+                    latitude,
+                    longitude,
+                    accuracy,
+                    timestamp: new Date().toISOString()
+                  });
+                  lastBackendUpdateRef.current = Date.now();
+                }
+                resolve();
+              },
+              reject,
+              networkOptions
+            );
           });
-          lastBackendUpdateRef.current = now;
-        } else if (!socket) {
-          console.warn('LocationTracker: No socket connection to send location');
-        } else {
-          console.log(`LocationTracker: Debouncing - ${Math.ceil((BACKEND_UPDATE_INTERVAL - (now - lastBackendUpdateRef.current)) / 1000)}s until next update`);
-        }
-      },
-      (error) => {
-        console.error('Geolocation error:', error);
-        
-        // Don't stop tracking on timeout - just show a message
-        if (error.code === 3) { // TIMEOUT
-          console.log('LocationTracker: Timeout, but continuing to try...');
-          setError('Location services are slow to respond. Continuing to try...');
-        } else if (error.code === 1) { // PERMISSION_DENIED
-          setError('Location permission denied. Please enable location access in your browser.');
+          console.log('LocationTracker: Network positioning successful');
+          return true;
+        } catch (networkError) {
+          console.error('LocationTracker: All positioning methods failed:', networkError.message);
+          setError('Location access failed. Please: 1) Enable location permissions, 2) Check device GPS/location settings, 3) Try refreshing the page.');
           setIsTracking(false);
-        } else if (error.code === 2) { // POSITION_UNAVAILABLE
-          setError('Location unavailable. Check your device\'s location settings.');
-        } else {
-          setError(`Location error: ${error.message}`);
+          return false;
         }
-      },
-      options
-    );
+      }
+    };
 
-    setWatchId(id);
-    console.log('LocationTracker: Watch started with ID:', id);
+    // Try to get initial position
+    const initialSuccess = await tryInitialPosition();
+
+    // Only start continuous tracking if we got initial position
+    if (!initialSuccess) {
+      setIsTracking(false);
+      return;
+    }
+
+    // Optimized tracking options for better GPS accuracy
+    const trackingOptions = {
+      enableHighAccuracy: true,
+      timeout: 25000, // Longer timeout for stable GPS lock
+      maximumAge: 5000 // Fresher positions for better accuracy
+    };
+
+    // Start continuous tracking with retry logic
+    const startContinuousTracking = () => {
+      const id = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          
+          console.log('LocationTracker: Raw location update', { latitude, longitude, accuracy });
+          
+          // Process and validate the location update
+          const processedLocation = processLocationUpdate(latitude, longitude, accuracy);
+          
+          if (!processedLocation) {
+            console.log('LocationTracker: Location update rejected by filter');
+            return; // Skip this update
+          }
+          
+          console.log('LocationTracker: Smoothed location', processedLocation);
+          setCurrentLocation({ 
+            latitude: processedLocation.latitude, 
+            longitude: processedLocation.longitude 
+          });
+          setAccuracy(processedLocation.accuracy);
+          setError(null); // Clear any previous errors
+          setLastLocationUpdate(new Date());
+          
+          // Send location to backend with debouncing
+          const now = Date.now();
+          if (socket && (now - lastBackendUpdateRef.current >= BACKEND_UPDATE_INTERVAL)) {
+            console.log('LocationTracker: Sending location to backend');
+            socket.emit('location-update', {
+              latitude: processedLocation.latitude,
+              longitude: processedLocation.longitude,
+              accuracy: processedLocation.accuracy,
+              timestamp: new Date().toISOString()
+            });
+            lastBackendUpdateRef.current = now;
+          } else if (!socket) {
+            console.warn('LocationTracker: No socket connection to send location');
+          } else {
+            console.log(`LocationTracker: Debouncing - ${Math.ceil((BACKEND_UPDATE_INTERVAL - (now - lastBackendUpdateRef.current)) / 1000)}s until next update`);
+          }
+        },
+        (error) => {
+          console.error('Geolocation continuous tracking error:', error);
+          
+          // Handle different error types with appropriate responses
+          if (error.code === 3) { // TIMEOUT
+            console.log('LocationTracker: Continuous tracking timeout, will retry...');
+            setError('Location update delayed. Retrying...');
+            // Don't stop tracking, just show temporary error
+          } else if (error.code === 1) { // PERMISSION_DENIED
+            setError('Location permission was revoked. Please re-enable location access.');
+            setIsTracking(false);
+          } else if (error.code === 2) { // POSITION_UNAVAILABLE
+            console.log('LocationTracker: Position unavailable, using fallback...');
+            setError('GPS unavailable. Trying network positioning...');
+            // Try to restart with network-only positioning
+            setTimeout(() => {
+              if (isTracking) { // Only restart if still supposed to be tracking
+                console.log('LocationTracker: Restarting with network positioning fallback');
+                navigator.geolocation.clearWatch(id);
+                startNetworkFallbackTracking();
+              }
+            }, 3000);
+          } else {
+            setError(`Location error: ${error.message}`);
+          }
+        },
+        trackingOptions
+      );
+
+      setWatchId(id);
+      console.log('LocationTracker: Continuous tracking started with ID:', id);
+    };
+
+    // Fallback tracking with network positioning only
+    const startNetworkFallbackTracking = () => {
+      const networkOptions = {
+        enableHighAccuracy: false, // Use network positioning
+        timeout: 25000, // Even longer timeout for network
+        maximumAge: 30000 // Allow older cached positions
+      };
+
+      const fallbackId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          console.log('LocationTracker: Network fallback location update', { latitude, longitude, accuracy });
+          
+          const processedLocation = processLocationUpdate(latitude, longitude, accuracy);
+          
+          if (!processedLocation) {
+            console.log('LocationTracker: Fallback location update rejected by filter');
+            return;
+          }
+          
+          setCurrentLocation({ 
+            latitude: processedLocation.latitude, 
+            longitude: processedLocation.longitude 
+          });
+          setAccuracy(processedLocation.accuracy);
+          setError('Using network positioning (reduced accuracy)');
+          setLastLocationUpdate(new Date());
+          
+          const now = Date.now();
+          if (socket && (now - lastBackendUpdateRef.current >= BACKEND_UPDATE_INTERVAL)) {
+            socket.emit('location-update', {
+              latitude: processedLocation.latitude,
+              longitude: processedLocation.longitude,
+              accuracy: processedLocation.accuracy,
+              timestamp: new Date().toISOString()
+            });
+            lastBackendUpdateRef.current = now;
+          }
+        },
+        (error) => {
+          console.error('LocationTracker: Network fallback also failed', error);
+          setError('Location services unavailable. Please check device settings.');
+        },
+        networkOptions
+      );
+
+      setWatchId(fallbackId);
+      console.log('LocationTracker: Network fallback tracking started with ID:', fallbackId);
+    };
+
+    // Start the initial continuous tracking
+    startContinuousTracking();
   };
 
   const stopTracking = () => {
@@ -297,9 +530,11 @@ const LocationTracker = () => {
   };
 
   const getAccuracyColor = (accuracy) => {
-    if (accuracy < 10) return 'success';
-    if (accuracy < 50) return 'warning';
-    return 'error';
+    if (accuracy < 10) return 'success';      // Excellent GPS
+    if (accuracy < 50) return 'warning';      // Good GPS
+    if (accuracy < 500) return 'error';       // Poor GPS
+    if (accuracy < 10000) return 'default';   // Network positioning
+    return 'default';                         // Very poor positioning
   };
 
   const formatDistance = (meters) => {
@@ -338,13 +573,21 @@ const LocationTracker = () => {
 
         {error && (
           <Alert 
-            severity="error" 
+            severity={accuracy && accuracy > 10000 ? "warning" : "error"}
             sx={{ 
               mb: 2,
               borderRadius: 2
             }}
           >
             {error}
+            {accuracy && accuracy > 10000 && (
+              <>
+                <br />
+                <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+                  💡 For better accuracy: Move outdoors, away from buildings, and wait 30-60 seconds for GPS lock
+                </Typography>
+              </>
+            )}
           </Alert>
         )}
 
@@ -366,9 +609,13 @@ const LocationTracker = () => {
                 </Typography>
                 {accuracy && (
                   <Chip
-                    label={`±${Math.round(accuracy)}m`}
+                    label={accuracy > 1000 ? `±${(accuracy/1000).toFixed(1)}km` : `±${Math.round(accuracy)}m`}
                     color={getAccuracyColor(accuracy)}
                     size="small"
+                    sx={{ 
+                      bgcolor: accuracy > 10000 ? '#ff9800' : undefined,
+                      color: accuracy > 10000 ? 'white' : undefined
+                    }}
                   />
                 )}
               </Box>

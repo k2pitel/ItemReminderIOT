@@ -68,15 +68,17 @@ router.get('/analytics/:itemId', auth, async (req, res) => {
     // Calculate analytics
     const analytics = {
       totalReadings: readings.length,
-      averageWeight: 0,
-      minWeight: Infinity,
-      maxWeight: -Infinity,
+      averageWeight: null,
+      minWeight: null,
+      maxWeight: null,
       lowStatusCount: 0,
       trend: []
     };
 
     if (readings.length > 0) {
       let totalWeight = 0;
+      analytics.minWeight = readings[0].weight;
+      analytics.maxWeight = readings[0].weight;
       
       readings.forEach(reading => {
         totalWeight += reading.weight;
@@ -113,6 +115,17 @@ router.get('/analytics/:itemId', auth, async (req, res) => {
         averageWeight: entry.sum / entry.count,
         count: entry.count
       }));
+    } else {
+      // Provide empty trend data for the time period
+      const now = new Date();
+      for (let i = daysBack - 1; i >= 0; i--) {
+        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        analytics.trend.push({
+          timestamp: date.toISOString().slice(0, 10),
+          averageWeight: 0,
+          count: 0
+        });
+      }
     }
 
     res.json(analytics);

@@ -39,6 +39,9 @@ app.use('/api/readings', require('./routes/readings'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/geofence', require('./routes/geofence'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/location', require('./routes/mobile-location'));
+// Debug/test helpers (only enabled when DEBUG_API_KEY is set in environment)
+app.use('/api/debug', require('./routes/debug'));
 
 // Health check
 app.get('/health', (req, res) => {
