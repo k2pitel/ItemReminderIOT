@@ -7,6 +7,9 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Snackbar,
+  Alert,
+  CircularProgress,
   Table,
   TableBody,
   TableCell,
@@ -42,6 +45,9 @@ const Items = () => {
     detectionMode: 'weight',
     notificationsEnabled: true
   });
+  const [saving, setSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [showError, setShowError] = useState(false);
 
   useEffect(() => {
     fetchItems();
@@ -121,16 +127,28 @@ const Items = () => {
   };
 
   const handleSubmit = async () => {
+    setSaving(true);
     try {
+      // Normalize payload types (number/boolean) before sending
+      const payload = {
+        ...formData,
+        thresholdWeight: Number(formData.thresholdWeight) || 0,
+        notificationsEnabled: Boolean(formData.notificationsEnabled)
+      };
+
       if (editingItem) {
-        await api.put(`/items/${editingItem._id}`, formData);
+        await api.put(`/items/${editingItem._id}`, payload);
       } else {
-        await api.post('/items', formData);
+        await api.post('/items', payload);
       }
-      fetchItems();
+      await fetchItems();
       handleCloseDialog();
     } catch (error) {
       console.error('Error saving item:', error);
+      setErrorMsg(error.response?.data?.error || error.message || 'Failed to save item');
+      setShowError(true);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -411,11 +429,16 @@ const Items = () => {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
+          <Button onClick={handleCloseDialog} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSubmit} variant="contained" disabled={saving} startIcon={saving ? <CircularProgress size={16} /> : null}>
             {editingItem ? 'Update' : 'Create'}
           </Button>
         </DialogActions>
+        <Snackbar open={showError} autoHideDuration={6000} onClose={() => setShowError(false)}>
+          <Alert severity="error" onClose={() => setShowError(false)} sx={{ width: '100%' }}>
+            {errorMsg}
+          </Alert>
+        </Snackbar>
       </Dialog>
     </Layout>
   );

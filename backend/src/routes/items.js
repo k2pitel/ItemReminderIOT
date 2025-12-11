@@ -39,6 +39,11 @@ router.post('/', auth, async (req, res) => {
       userId: req.userId
     };
 
+    // Convert empty geofenceId to null (Mongoose ObjectId casting issue)
+    if (itemData.geofenceId === '') {
+      itemData.geofenceId = null;
+    }
+
     const item = new Item(itemData);
     await item.save();
 
@@ -56,9 +61,16 @@ router.post('/', auth, async (req, res) => {
 // Update item
 router.put('/:id', auth, async (req, res) => {
   try {
+    const updateData = req.body;
+
+    // Convert empty geofenceId to null (Mongoose ObjectId casting issue)
+    if (updateData.geofenceId === '') {
+      updateData.geofenceId = null;
+    }
+
     const item = await Item.findOneAndUpdate(
       { _id: req.params.id, userId: req.userId },
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
 
