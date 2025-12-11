@@ -10,7 +10,14 @@ const char* ssid = "Aura_Fiber_82031";
 const char* password = "Rn2NGnZWEK2S";
 
 // MQTT Configuration
-const char* mqtt_server = "mosquitto";        // MQTT broker - use container name in Docker
+// MQTT broker host for the ESP32. This must be reachable from the ESP32's
+// WiFi network (use LAN IP or DNS name). Do NOT rely on Docker container
+// hostnames here unless the ESP32 is on the same Docker network.
+// You can override this at compile-time by defining MQTT_BROKER_HOST.
+#ifndef MQTT_BROKER_HOST
+#define MQTT_BROKER_HOST "192.168.0.50"
+#endif
+const char* mqtt_server = MQTT_BROKER_HOST;     // MQTT broker host (reachable from ESP32)
 const int mqtt_port = 1883;
 const char* mqtt_user = "";                   // No authentication by default
 const char* mqtt_password = "";               // No authentication by default
@@ -171,6 +178,22 @@ void reconnect() {
     Serial.print(mqtt_server);
     Serial.print("...");
 
+    // Try to resolve hostname to IP (useful when mqtt_server is a DNS name)
+    IPAddress brokerIp;
+    bool resolved = false;
+    if (WiFi.hostByName(mqtt_server, brokerIp)) {
+      Serial.print(" resolved to ");
+      Serial.println(brokerIp);
+      // Use IP-based connection (some networks have DNS issues from ESP)
+      client.setServer(brokerIp, mqtt_port);
+      resolved = true;
+    } else {
+      Serial.println();
+      Serial.println("[MQTT] DNS lookup failed or not needed; will use hostname as-is");
+      // Ensure server is set using original host string
+      client.setServer(mqtt_server, mqtt_port);
+    }
+
     // Create a unique client ID
     String clientId = "ESP32_";
     clientId += device_id;
@@ -205,9 +228,26 @@ void reconnect() {
       // Publish online status
       publishStatus("online");
     } else {
+      int st = client.state();
       Serial.print(" failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" | Retry in 5 seconds...");
+      Serial.print(st);
+      Serial.print(" (");
+      // Print human-readable state when possible
+      switch (st) {
+        case -4: Serial.print("MQTT_CONNECTION_TIMEOUT"); break;
+        case -3: Serial.print("MQTT_CONNECTION_LOST"); break;
+        case -2: Serial.print("MQTT_CONNECT_FAILED"); break;
+        case -1: Serial.print("MQTT_DISCONNECTED"); break;
+        default: Serial.print("UNKNOWN"); break;
+      }
+      Serial.println(") | Retry in 5 seconds...");
+      // Print useful diagnostics
+      Serial.print("[MQTT] Local IP: ");
+      Serial.println(WiFi.localIP());
+      if (!resolved) {
+        Serial.print("[MQTT] Broker host: ");
+        Serial.println(mqtt_server);
+      }
       delay(5000);
     }
   }

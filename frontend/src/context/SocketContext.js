@@ -19,14 +19,17 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      // Use current host with same protocol (http or https)
-      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-      const SOCKET_URL = `${protocol}//${window.location.host}`;
+      // Determine socket URL: prefer env override, otherwise use dev/backend rule or current origin
+      const SOCKET_URL =
+        process.env.REACT_APP_SOCKET_URL ||
+        (window.location.hostname === 'localhost' && window.location.port === '3000'
+          ? 'http://localhost:5000'
+          : `${window.location.protocol}//${window.location.host}`);
       console.log('Connecting to socket:', SOCKET_URL);
-      
+
       const newSocket = io(SOCKET_URL, {
         transports: ['websocket', 'polling'],
-        secure: window.location.protocol === 'https:'
+        secure: SOCKET_URL.startsWith('https:')
       });
 
       newSocket.on('connect', () => {

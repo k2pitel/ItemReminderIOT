@@ -157,110 +157,118 @@ const Dashboard = () => {
             </Card>
           </Grid>
         ) : (
-          items.map((item) => (
-            <Grid item xs={12} sm={6} md={4} key={item._id}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 500, flex: 1 }}>
-                      {item.name}
-                    </Typography>
-                    <Chip
-                      label={getStatusLabel(item)}
-                      color={getStatusColor(item.status)}
-                      size="small"
-                    />
-                  </Box>
-                  
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '0.8125rem' }}>
-                    {item.description || 'No description'}
-                  </Typography>
+          items.map((item) => {
+            const lastReadingTime = item.lastReading ? new Date(item.lastReading).getTime() : 0;
+            const ageMs = Date.now() - lastReadingTime;
+            const isRecent = lastReadingTime && ageMs < 60000; // consider recent within 60s
+            const displayWeight = isRecent ? (item.currentWeight ?? 0).toFixed(1) : null;
+            const displayStatus = isRecent ? item.status : 'OFFLINE';
 
-                  <Box sx={{ 
-                    mb: 2, 
-                    p: 1.5, 
-                    borderRadius: 1, 
-                    bgcolor: 'grey.50'
-                  }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        {item.detectionMode === 'wearable' ? 'Status' : 'Weight'}
+            return (
+              <Grid item xs={12} sm={6} md={4} key={item._id}>
+                <Card sx={{ height: '100%' }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 500, flex: 1 }}>
+                        {item.name}
                       </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {item.detectionMode === 'wearable' 
-                          ? getStatusLabel(item) 
-                          : `${item.currentWeight?.toFixed(1) || 0} ${item.unit}`
-                        }
-                      </Typography>
+                      <Chip
+                        label={getStatusLabel({ ...item, status: displayStatus })}
+                        color={getStatusColor(displayStatus)}
+                        size="small"
+                      />
                     </Box>
-                    {item.detectionMode !== 'wearable' && (
-                      <>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="caption" color="text.secondary">
-                            Threshold
-                          </Typography>
-                          <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                            {item.thresholdWeight} {item.unit}
-                          </Typography>
-                        </Box>
-                        <LinearProgress
-                          variant="determinate"
-                          value={getPercentage(item.currentWeight, item.thresholdWeight)}
-                          color={getStatusColor(item.status)}
-                          sx={{ 
-                            height: 4, 
-                            borderRadius: 2,
-                            bgcolor: 'grey.200' 
-                          }}
-                        />
-                      </>
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontSize: '0.8125rem' }}>
+                      {item.description || 'No description'}
+                    </Typography>
+
+                    <Box sx={{ 
+                      mb: 2, 
+                      p: 1.5, 
+                      borderRadius: 1, 
+                      bgcolor: 'grey.50'
+                    }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {item.detectionMode === 'wearable' ? 'Status' : 'Weight'}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {item.detectionMode === 'wearable' 
+                            ? getStatusLabel(item) 
+                            : (displayWeight !== null ? `${displayWeight} ${item.unit}` : 'No recent reading')
+                          }
+                        </Typography>
+                      </Box>
+                      {item.detectionMode !== 'wearable' && (
+                        <>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Threshold
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                              {item.thresholdWeight} {item.unit}
+                            </Typography>
+                          </Box>
+                          <LinearProgress
+                            variant="determinate"
+                            value={getPercentage(isRecent ? item.currentWeight : 0, item.thresholdWeight)}
+                            color={getStatusColor(displayStatus)}
+                            sx={{ 
+                              height: 4, 
+                              borderRadius: 2,
+                              bgcolor: 'grey.200' 
+                            }}
+                          />
+                        </>
+                      )}
+                    </Box>
+
+                    {item.geofenceId && (
+                      <Box sx={{ mb: 2 }}>
+                        {(() => {
+                          const geoStatus = getGeofenceStatus(item);
+                          if (geoStatus) {
+                            return (
+                              <Chip
+                                icon={<LocationOn />}
+                                label={`Inside: ${geoStatus.geofenceName}`}
+                                color="success"
+                                size="small"
+                                sx={{ fontWeight: 600 }}
+                              />
+                            );
+                          } else {
+                            return (
+                              <Chip
+                                icon={<LocationOff />}
+                                label="Outside geofence"
+                                size="small"
+                                sx={{ fontWeight: 600 }}
+                              />
+                            );
+                          }
+                        })()}
+                      </Box>
                     )}
-                  </Box>
 
-                  {item.geofenceId && (
-                    <Box sx={{ mb: 2 }}>
-                      {(() => {
-                        const geoStatus = getGeofenceStatus(item);
-                        if (geoStatus) {
-                          return (
-                            <Chip
-                              icon={<LocationOn />}
-                              label={`Inside: ${geoStatus.geofenceName}`}
-                              color="success"
-                              size="small"
-                              sx={{ fontWeight: 600 }}
-                            />
-                          );
-                        } else {
-                          return (
-                            <Chip
-                              icon={<LocationOff />}
-                              label="Outside geofence"
-                              size="small"
-                              sx={{ fontWeight: 600 }}
-                            />
-                          );
-                        }
-                      })()}
+                    <Box sx={{ 
+                      pt: 2, 
+                      borderTop: '1px solid',
+                      borderColor: 'grey.200'
+                    }}>
+                      <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                        Device ID: <strong>{item.deviceId}</strong>
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Last updated: {item.lastReading ? new Date(item.lastReading).toLocaleString() : 'Never'}
+                      </Typography>
                     </Box>
-                  )}
-
-                  <Box sx={{ 
-                    pt: 2, 
-                    borderTop: '1px solid',
-                    borderColor: 'grey.200'
-                  }}>
-                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
-                      Device ID: <strong>{item.deviceId}</strong>
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Last updated: {new Date(item.lastReading).toLocaleString()}
-                    </Typography>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })
         )}
       </Grid>
     </Layout>
