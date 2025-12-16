@@ -1,80 +1,83 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#include "HX711.h"
+#include <HX711.h>
 #include <Preferences.h>
 
-// ==================== CONFIGURATION ====================
-// WiFi Configuration
-// Option 1: Use your university WiFi (if available for devices)
-// const char* ssid = "your-wifi-name";
-// const char* password = "your-wifi-password";
+// ==================== DEVICE CONFIGURATION ====================
+struct DeviceConfig {
+  const char* deviceId = "ESP32_001";
+  const char* itemName = "Pills";
+  const float thresholdWeight = 1000.0;
+  const unsigned long publishInterval = 2000;
+  const int maxRetries = 5;
+};
 
-// Option 2: Use mobile hotspot (current setup)
-const char* ssid = "AndroidAP470C";
-const char* password = "Andre1234";
+struct WiFiConfig {
+  const char* ssid = "AndroidAP470C";
+  const char* password = "Andre1234";
+  const int connectionTimeout = 30;
+};
 
-// MQTT Configuration
-// MQTT broker host for the ESP32. This must be reachable from the ESP32's
-// WiFi network (use LAN IP or DNS name). Do NOT rely on Docker container
-// hostnames here unless the ESP32 is on the same Docker network.
-// You can override this at compile-time by defining MQTT_BROKER_HOST.
-#ifndef MQTT_BROKER_HOST
-#define MQTT_BROKER_HOST "192.168.229.112"
-#endif
-const char* mqtt_server = MQTT_BROKER_HOST;     // MQTT broker host (reachable from ESP32)
-const int mqtt_port = 1883;
-const char* mqtt_user = "";                   // No authentication by default
-const char* mqtt_password = "";               // No authentication by default
-const bool MQTT_ENABLED = true;               // ✅ ENABLED - Will send real sensor data
+struct MqttConfig {
+  const char* broker = "192.168.229.112";
+  const int port = 1883;
+  const char* user = "";
+  const char* password = "";
+  const int keepAlive = 60;
+};
 
-// Device Configuration - MUST MATCH THE DEVICE ID IN YOUR WEB APP
-const char* device_id = "ESP32_001";
-const char* item_name = "Pills";
+struct SensorConfig {
+  const int dtPin = 2;    // GPIO 2
+  const int sckPin = 3;   // GPIO 3
+  const float calibrationFactor = 1310.73;
+  const int numReadings = 3;
+  const float minValidWeight = -10.0;
+  const float maxValidWeight = 10000.0;
+};
 
-// HX711 Load Cell Pins (ESP32-C3 compatible)
-const int HX711_DT = 2;   // GPIO 2 (D0 on XIAO ESP32C3)
-const int HX711_SCK = 3;  // GPIO 3 (D1 on XIAO ESP32C3)
+// Global configuration instances
+DeviceConfig deviceConfig;
+WiFiConfig wifiConfig;
+MqttConfig mqttConfig;
+SensorConfig sensorConfig;
 
-// Calibration / Measurement Settings
-float calibration_factor = 1310.73;  // Updated from latest calibration (fallback if NVS empty)
-float current_weight = 0.0;
-float threshold_weight = 1000.0;   // Minimum weight in grams - can be updated via MQTT
-unsigned long last_publish = 0;
-const unsigned long publish_interval = 2000;  // Publish every 2 seconds for faster updates
-const float min_valid_weight = -10.0;      // Allow small negative drift (tare noise)
-const float max_valid_weight = 10000.0;    // Max 10kg (realistic for pills)
-const int num_readings = 3;        // Fewer samples to speed up loop
-long last_raw_average = 0;         // Last raw ADC average from HX711
-int last_valid_samples = 0;        // Count of valid averaged samples used
-
-// MQTT Topics (per-device)
-char weight_topic[128];
-char status_topic[128];
-char command_topic[128];
-const char* broadcast_command_topic = "itemreminder/command"; // Backwards compatibility
-char offline_status_payload[256];
-
-// ==================== GLOBALS ====================
+// ==================== GLOBAL STATE ====================
 WiFiClient espClient;
 PubSubClient client(espClient);
 HX711 scale;
 Preferences prefs;
 
-// ==================== HELPERS ====================
+// Runtime state
+struct DeviceState {
+  float currentWeight = 0.0;
+  float calibrationFactor = 0.0;
+  unsigned long lastPublish = 0;
+  int connectionRetries = 0;
+  bool isConnected = false;
+} state;
 
+// MQTT topics (built dynamically)
+char weightTopic[128];
+char statusTopic[128];
+char commandTopic[128];
+
+// ==================== UTILITY FUNCTIONS ====================
 void buildMqttTopics() {
-  snprintf(weight_topic, sizeof(weight_topic), "itemreminder/devices/%s/weight", device_id);
-  snprintf(status_topic, sizeof(status_topic), "itemreminder/devices/%s/status", device_id);
-  snprintf(command_topic, sizeof(command_topic), "itemreminder/devices/%s/command", device_id);
+  snprintf(weightTopic, sizeof(weightTopic), "itemreminder/devices/%s/weight", deviceConfig.deviceId);
+  snprintf(statusTopic, sizeof(statusTopic), "itemreminder/devices/%s/status", deviceConfig.deviceId);
+  snprintf(commandTopic, sizeof(commandTopic), "itemreminder/devices/%s/command", deviceConfig.deviceId);
 }
 
-void buildOfflinePayload() {
-  JsonDocument doc;
-  doc["device_id"] = device_id;
-  doc["status"] = "offline";
-  doc["reason"] = "unexpected_disconnect";
-  serializeJson(doc, offline_status_payload, sizeof(offline_status_payload));
+void logDeviceInfo() {
+  Serial.println("===================================");
+  Serial.println("ESP32 Item Reminder - Starting...");
+  Serial.println("===================================");
+  Serial.printf("Device ID: %s\n", deviceConfig.deviceId);
+  Serial.printf("Item Name: %s\n", deviceConfig.itemName);
+  Serial.printf("MQTT Broker: %s:%d\n", mqttConfig.broker, mqttConfig.port);
+  Serial.printf("WiFi SSID: %s\n", wifiConfig.ssid);
+  Serial.println("===================================");
 }
 
 void setup_wifi() {

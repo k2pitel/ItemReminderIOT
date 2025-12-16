@@ -4,108 +4,127 @@ const Item = require('../models/Item');
 const Reading = require('../models/Reading');
 const alertService = require('./alertService');
 
+// MQTT Configuration
+const MQTT_CONFIG = {
+  reconnectPeriod: 1000,
+  clientIdPrefix: 'itemreminder_backend_'
+};
+
+const TOPICS = {
+  telemetry: 'itemreminder/devices/+/weight',
+  status: 'itemreminder/devices/+/status',
+  legacyTelemetry: 'itemreminder/weight',
+  legacyStatus: 'itemreminder/status'
+};
+
 class MqttService {
   constructor() {
     this.client = null;
     this.io = null;
-    this.topics = {
-      telemetry: 'itemreminder/devices/+/weight',
-      status: 'itemreminder/devices/+/status',
-      legacyTelemetry: 'itemreminder/weight',
-      legacyStatus: 'itemreminder/status'
-    };
   }
 
   start(io) {
     this.io = io;
     
-    const options = {
-      clientId: 'itemreminder_backend_' + Math.random().toString(16).substr(2, 8),
+    const config = this.buildConnectionConfig();
+    const broker = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
+    
+    this.client = mqtt.connect(broker, config);
+    this.setupEventHandlers();
+  }
+
+  buildConnectionConfig() {
+    return {
+      clientId: MQTT_CONFIG.clientIdPrefix + Math.random().toString(16).substr(2, 8),
       username: process.env.MQTT_USER || '',
       password: process.env.MQTT_PASSWORD || '',
-      reconnectPeriod: 1000
+      reconnectPeriod: MQTT_CONFIG.reconnectPeriod
     };
+  }
 
+  setupEventHandlers() {
+    this.client.on('connect', () => this.handleConnect());
+    this.client.on('message', (topic, message) => this.handleMessage(topic, message));
+    this.client.on('error', (error) => this.handleError(error));
+    this.client.on('offline', () => this.handleOffline());
+    this.client.on('reconnect', () => this.handleReconnect());
+  }
+
+  handleConnect() {
     const broker = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
-    this.client = mqtt.connect(broker, options);
+    logger.info('MQTT connected to broker:', broker);
+    this.subscribeToTopics();
+  }
 
-    this.client.on('connect', () => {
-      logger.info('MQTT connected to broker:', broker);
-      
-      // Subscribe to per-device topics and keep legacy topics for compatibility
-      const topicsToSubscribe = [
-        this.topics.telemetry,
-        this.topics.status,
-        this.topics.legacyTelemetry,
-        this.topics.legacyStatus
-      ];
-
-      topicsToSubscribe.forEach((topic) => {
-        this.client.subscribe(topic, (err) => {
-          if (err) {
-            logger.error(`MQTT subscribe error for ${topic}:`, err);
-          } else {
-            logger.info(`MQTT subscribed to ${topic}`);
-          }
-        });
+  subscribeToTopics() {
+    const topicsToSubscribe = Object.values(TOPICS);
+    
+    topicsToSubscribe.forEach((topic) => {
+      this.client.subscribe(topic, (err) => {
+        if (err) {
+          logger.error(`MQTT subscribe error for ${topic}:`, err);
+        } else {
+          logger.info(`MQTT subscribed to ${topic}`);
+        }
       });
     });
+  }
 
-    this.client.on('message', async (topic, message) => {
-      try {
-        const messageString = message.toString();
-        logger.info(`Raw MQTT message on ${topic}: "${messageString}"`);
-        
-        const data = JSON.parse(messageString);
-        const { type, deviceIdFromTopic } = this.parseTopic(topic);
-        const normalizedData = this.normalizePayload(type, data, deviceIdFromTopic);
+  async handleMessage(topic, message) {
+    try {
+      const messageString = message.toString();
+      logger.info(`Raw MQTT message on ${topic}: "${messageString}"`);
+      
+      const data = JSON.parse(messageString);
+      const { type, deviceIdFromTopic } = this.parseTopic(topic);
+      const normalizedData = this.normalizePayload(type, data, deviceIdFromTopic);
 
-        if (!type || !normalizedData) {
-          logger.warn(`MQTT message on ${topic} ignored: could not resolve type/device_id`);
-          return;
-        }
-
-        logger.info(`MQTT message received on ${topic}:`, normalizedData);
-
-        if (type === 'weight') {
-          await this.handleWeightData(normalizedData);
-        } else if (type === 'status') {
-          await this.handleStatusData(normalizedData);
-        }
-      } catch (error) {
-        logger.error('Error processing MQTT message:', error);
-        logger.error('Raw message content:', message.toString());
+      if (!type || !normalizedData) {
+        logger.warn(`MQTT message on ${topic} ignored: could not resolve type/device_id`);
+        return;
       }
-    });
 
-    this.client.on('error', (error) => {
-      logger.error('MQTT error:', error);
-    });
+      logger.info(`MQTT message received on ${topic}:`, normalizedData);
 
-    this.client.on('offline', () => {
-      logger.warn('MQTT client offline');
-    });
+      if (type === 'weight') {
+        await this.handleWeightData(normalizedData);
+      } else if (type === 'status') {
+        await this.handleStatusData(normalizedData);
+      }
+    } catch (error) {
+      logger.error('Error processing MQTT message:', error);
+      logger.error('Raw message content:', message.toString());
+    }
+  }
 
-    this.client.on('reconnect', () => {
-      logger.info('MQTT reconnecting...');
-    });
+  handleError(error) {
+    logger.error('MQTT error:', error);
+  }
+
+  handleOffline() {
+    logger.warn('MQTT client offline');
+  }
+
+  handleReconnect() {
+    logger.info('MQTT reconnecting...');
   }
 
   parseTopic(topic) {
     const parts = topic.split('/');
 
-    // itemreminder/devices/{deviceId}/{type}
+    // Modern format: itemreminder/devices/{deviceId}/{type}
     if (parts.length >= 4 && parts[0] === 'itemreminder' && parts[1] === 'devices') {
       const deviceId = parts[2];
-      const type = parts[3] === 'weight' ? 'weight' : parts[3] === 'status' ? 'status' : null;
+      const type = ['weight', 'status'].includes(parts[3]) ? parts[3] : null;
       return { type, deviceIdFromTopic: deviceId };
     }
 
-    if (topic === 'itemreminder/weight') {
+    // Legacy format support
+    if (topic === TOPICS.legacyTelemetry) {
       return { type: 'weight', deviceIdFromTopic: null };
     }
 
-    if (topic === 'itemreminder/status') {
+    if (topic === TOPICS.legacyStatus) {
       return { type: 'status', deviceIdFromTopic: null };
     }
 

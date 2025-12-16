@@ -22,7 +22,7 @@ const readingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['OK', 'LOW'],
+    enum: ['OK', 'LOW', 'EMPTY'],
     required: true
   },
   wifiRssi: {

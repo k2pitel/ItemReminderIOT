@@ -1,46 +1,48 @@
-# ItemReminderIOT
+# ItemReminder IoT
 
-An ESP32 + MQTT + Node.js + MongoDB + React system for tracking items (e.g., medications, groceries) with geofencing and real-time alerts. ESP32 simulates a weight sensor publishing via MQTT. Backend stores data, checks geofence rules, and sends email notifications. Frontend shows live status, trends, and analytics. Secure, scalable, multi-user design for smart, location-aware reminders.
+A modern, scalable IoT system for smart item tracking with real-time monitoring, geofencing, and intelligent alerts. Built with clean architecture principles using ESP32 sensors, MQTT messaging, Node.js backend, and React frontend.
 
-## 🌟 Features
+## 🌟 Key Features
 
-- **ESP32 Weight Sensor Simulation**: Simulates weight measurements and publishes data via MQTT
-- **Real-time Monitoring**: WebSocket-based live updates for item status
-- **Geofencing**: Location-based alerts and reminders
-- **Analytics Dashboard**: View trends, statistics, and historical data
-- **Multi-user Support**: Secure authentication with JWT
-- **Notifications**: Email notifications via SMTP (Gmail)
-- **Responsive UI**: Material-UI based React frontend
-- **Docker Support**: Easy deployment with Docker Compose
+- **Smart Weight Sensing**: ESP32-based HX711 load cell integration with reliable MQTT communication
+- **Real-time Updates**: WebSocket-powered live dashboard with sub-second response times
+- **Intelligent Geofencing**: Location-based alerts with configurable boundaries and smart notifications
+- **Advanced Analytics**: Comprehensive dashboards with trend analysis and predictive insights
+- **Multi-tenant Architecture**: Secure user management with JWT authentication and role-based access
+- **Robust Notifications**: Email alerts via SMTP with customizable triggers and templates
+- **Modern UI/UX**: Responsive Material Design interface optimized for mobile and desktop
+- **Production-ready Deployment**: Docker containerization with health checks and resource limits
+- **Scalable Infrastructure**: Microservices architecture ready for horizontal scaling
 
-## 📁 Project Structure
+## 🏗️ Architecture
 
 ```
-ItemReminderIOT/
-├── esp32/                  # ESP32 firmware
-│   ├── item_reminder.ino  # Main Arduino sketch
-│   └── README.md          # ESP32 setup instructions
-├── backend/               # Node.js backend
+ItemReminder IoT/
+├── esp32/                  # ESP32 firmware (C++)
+│   ├── src/main.cpp       # Main firmware with improved error handling
+│   └── platformio.ini     # PlatformIO configuration
+├── backend/               # Node.js backend (Clean Architecture)
 │   ├── src/
-│   │   ├── models/        # MongoDB models
-│   │   ├── routes/        # Express routes
+│   │   ├── models/        # MongoDB schemas and validation
+│   │   ├── routes/        # Express route handlers
 │   │   ├── services/      # Business logic (MQTT, notifications, geofencing)
-│   │   ├── middleware/    # Authentication middleware
-│   │   └── index.js       # Server entry point
-│   ├── package.json
-│   └── Dockerfile
-├── frontend/              # React frontend
+│   │   ├── socket/        # WebSocket handlers
+│   │   ├── middleware/    # Authentication and validation middleware
+│   │   └── index.js       # Application entry point
+│   ├── package.json       # Dependencies and scripts
+│   └── Dockerfile         # Production-ready container
+├── frontend/              # React SPA (Modern React patterns)
 │   ├── src/
-│   │   ├── components/    # Reusable components
-│   │   ├── pages/         # Page components
-│   │   ├── context/       # React context (Auth, Socket)
-│   │   └── services/      # API service
+│   │   ├── components/    # Reusable UI components
+│   │   ├── pages/         # Page-level components
+│   │   ├── context/       # React Context (Auth, Socket)
+│   │   └── services/      # API client and utilities
 │   ├── package.json
-│   └── Dockerfile
+│   └── Dockerfile         # Nginx-based static serving
 ├── mosquitto/             # MQTT broker configuration
-│   └── config/
-│       └── mosquitto.conf
-├── docker-compose.yml     # Docker orchestration
+│   └── config/mosquitto.conf
+├── docker-compose.yml     # Orchestration with health checks
+├── .env.example           # Environment template
 └── README.md
 ```
 
