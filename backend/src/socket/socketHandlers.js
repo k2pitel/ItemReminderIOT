@@ -2,7 +2,7 @@ const logger = require('../utils/logger');
 const geofenceService = require('../services/geofenceService');
 
 // Rate limiting configuration
-const LOCATION_UPDATE_COOLDOWN = 4000; // 4 seconds minimum between updates
+const LOCATION_UPDATE_COOLDOWN = 3000; // 3 seconds for unstable networks
 const locationUpdateLimiter = new Map();
 
 const setupSocketHandlers = (io) => {

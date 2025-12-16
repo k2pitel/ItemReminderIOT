@@ -4,17 +4,19 @@ const Item = require('../models/Item');
 const Reading = require('../models/Reading');
 const alertService = require('./alertService');
 
-// MQTT Configuration
 const MQTT_CONFIG = {
   reconnectPeriod: 1000,
   clientIdPrefix: 'itemreminder_backend_'
 };
 
 const TOPICS = {
-  telemetry: 'itemreminder/devices/+/weight',
-  status: 'itemreminder/devices/+/status',
-  legacyTelemetry: 'itemreminder/weight',
-  legacyStatus: 'itemreminder/status'
+  weight: 'itemreminder/devices/+/weight',
+  status: 'itemreminder/devices/+/status'
+};
+
+const STATUS_THRESHOLDS = {
+  EMPTY: 0,
+  LOW_WEIGHT_THRESHOLD: 5
 };
 
 class MqttService {
@@ -25,41 +27,33 @@ class MqttService {
 
   start(io) {
     this.io = io;
-    
-    const config = this.buildConnectionConfig();
     const broker = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
     
-    this.client = mqtt.connect(broker, config);
-    this.setupEventHandlers();
-  }
-
-  buildConnectionConfig() {
-    return {
+    const config = {
       clientId: MQTT_CONFIG.clientIdPrefix + Math.random().toString(16).substr(2, 8),
       username: process.env.MQTT_USER || '',
       password: process.env.MQTT_PASSWORD || '',
       reconnectPeriod: MQTT_CONFIG.reconnectPeriod
     };
+    
+    this.client = mqtt.connect(broker, config);
+    this.setupEventHandlers();
   }
 
   setupEventHandlers() {
-    this.client.on('connect', () => this.handleConnect());
+    this.client.on('connect', () => {
+      logger.info('MQTT connected to broker');
+      this.subscribeToTopics();
+    });
+    
     this.client.on('message', (topic, message) => this.handleMessage(topic, message));
-    this.client.on('error', (error) => this.handleError(error));
-    this.client.on('offline', () => this.handleOffline());
-    this.client.on('reconnect', () => this.handleReconnect());
-  }
-
-  handleConnect() {
-    const broker = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
-    logger.info('MQTT connected to broker:', broker);
-    this.subscribeToTopics();
+    this.client.on('error', (error) => logger.error('MQTT error:', error));
+    this.client.on('offline', () => logger.warn('MQTT client offline'));
+    this.client.on('reconnect', () => logger.info('MQTT reconnecting...'));
   }
 
   subscribeToTopics() {
-    const topicsToSubscribe = Object.values(TOPICS);
-    
-    topicsToSubscribe.forEach((topic) => {
+    Object.values(TOPICS).forEach((topic) => {
       this.client.subscribe(topic, (err) => {
         if (err) {
           logger.error(`MQTT subscribe error for ${topic}:`, err);
@@ -73,250 +67,193 @@ class MqttService {
   async handleMessage(topic, message) {
     try {
       const messageString = message.toString();
-      logger.info(`Raw MQTT message on ${topic}: "${messageString}"`);
+      logger.info(`MQTT message on ${topic}: ${messageString}`);
       
       const data = JSON.parse(messageString);
-      const { type, deviceIdFromTopic } = this.parseTopic(topic);
-      const normalizedData = this.normalizePayload(type, data, deviceIdFromTopic);
-
-      if (!type || !normalizedData) {
-        logger.warn(`MQTT message on ${topic} ignored: could not resolve type/device_id`);
+      const { type, deviceId } = this.parseTopic(topic);
+      
+      if (!deviceId || !data.device_id) {
+        logger.warn(`Invalid MQTT message: missing device ID`);
         return;
       }
 
-      logger.info(`MQTT message received on ${topic}:`, normalizedData);
-
       if (type === 'weight') {
-        await this.handleWeightData(normalizedData);
+        await this.handleWeightData(data);
       } else if (type === 'status') {
-        await this.handleStatusData(normalizedData);
+        await this.handleStatusData(data);
       }
     } catch (error) {
       logger.error('Error processing MQTT message:', error);
-      logger.error('Raw message content:', message.toString());
     }
-  }
-
-  handleError(error) {
-    logger.error('MQTT error:', error);
-  }
-
-  handleOffline() {
-    logger.warn('MQTT client offline');
-  }
-
-  handleReconnect() {
-    logger.info('MQTT reconnecting...');
   }
 
   parseTopic(topic) {
     const parts = topic.split('/');
-
-    // Modern format: itemreminder/devices/{deviceId}/{type}
+    
     if (parts.length >= 4 && parts[0] === 'itemreminder' && parts[1] === 'devices') {
-      const deviceId = parts[2];
-      const type = ['weight', 'status'].includes(parts[3]) ? parts[3] : null;
-      return { type, deviceIdFromTopic: deviceId };
+      return {
+        type: parts[3],
+        deviceId: parts[2]
+      };
     }
-
-    // Legacy format support
-    if (topic === TOPICS.legacyTelemetry) {
-      return { type: 'weight', deviceIdFromTopic: null };
-    }
-
-    if (topic === TOPICS.legacyStatus) {
-      return { type: 'status', deviceIdFromTopic: null };
-    }
-
-    return { type: null, deviceIdFromTopic: null };
-  }
-
-  normalizePayload(type, data, deviceIdFromTopic) {
-    if (!type) {
-      return null;
-    }
-
-    const normalized = { ...data };
-    if (!normalized.device_id && normalized.deviceId) {
-      normalized.device_id = normalized.deviceId;
-    }
-    if (!normalized.device_id && deviceIdFromTopic) {
-      normalized.device_id = deviceIdFromTopic;
-    }
-
-    if (!normalized.device_id) {
-      logger.warn(`MQTT ${type} payload missing device_id. Topic device fallback: ${deviceIdFromTopic || 'none'}`);
-      return null;
-    }
-
-    return normalized;
+    
+    return { type: null, deviceId: null };
   }
 
   async handleWeightData(data) {
-    const { device_id, item_name, weight, threshold, status, wifi_rssi, wear_status } = data;
+    const { device_id, weight, threshold, status, wifi_rssi, wear_status } = data;
 
     try {
-      // Find or create item
-      let item = await Item.findOne({ deviceId: device_id });
+      const item = await Item.findOne({ deviceId: device_id, active: true });
       
       if (!item) {
-        logger.warn(`Item not found for device ${device_id}, skipping...`);
+        logger.warn(`Active item not found for device ${device_id}`);
         return;
       }
 
-      const thresholdValue = typeof threshold === 'number' ? threshold : item.thresholdWeight;
-      const statusValue = status || item.status;
-
-      // Update basic data
-      item.currentWeight = weight;
-      if (threshold !== undefined) {
-        item.thresholdWeight = threshold;
-      } else {
-        item.thresholdWeight = thresholdValue;
-      }
-      item.lastReading = new Date();
-      
-      // Handle detection mode and status
-      if (wear_status !== undefined) {
-        // Wearable mode detected
-        item.wearStatus = wear_status;
-        item.isWorn = wear_status === 'ON';
-        
-        // Auto-set detection mode if not already set
-        if (!item.detectionMode || item.detectionMode !== 'wearable') {
-          item.detectionMode = 'wearable';
-          item.wearableMode = true;
-        }
-        
-        // For wearable mode, use wearStatus as the main status
-        item.status = wear_status; // Will be 'ON' or 'OFF'
-      } else {
-        // Weight mode (no wear_status provided)
-        if (!item.detectionMode || item.detectionMode !== 'weight') {
-          item.detectionMode = 'weight';
-          item.wearableMode = false;
-        }
-        
-        // For weight mode, use the status from sensor or calculate it
-        if (status) {
-          item.status = status;
-        } else {
-          // Calculate status based on weight and threshold
-          if (weight <= 0) {
-            item.status = 'EMPTY';
-          } else if (weight < item.thresholdWeight) {
-            item.status = 'LOW';
-          } else {
-            item.status = 'OK';
-          }
-        }
-        item.wearStatus = 'N/A';
-      }
-      
-      // Special logic: If wearable mode and weight is close to 0, force OFF status
-      if (item.detectionMode === 'wearable' && weight < 5) {
-        item.wearStatus = 'OFF';
-        item.isWorn = false;
-        item.status = 'OFF';
-        logger.info(`Auto-detected OFF status for ${item.name} (weight: ${weight})`);
-      }
-      
+      this.updateItemFromWeight(item, { weight, threshold, status, wear_status });
       await item.save();
 
-      // Save reading - use item values if not provided in MQTT message
-      const reading = new Reading({
-        itemId: item._id,
-        deviceId: device_id,
-        weight,
-        threshold: threshold !== undefined ? threshold : item.thresholdWeight,
-        status: status || item.status,
-        wifiRssi: wifi_rssi
-      });
-      await reading.save();
-
-      // Emit real-time update to the specific user who owns this item
-      if (this.io) {
-        const updateData = {
-          itemId: item._id,
-          deviceId: device_id,
-          weight,
-          status: item.status,
-          wearStatus: item.wearStatus,
-          isWorn: item.isWorn,
-          timestamp: new Date()
-        };
-        
-        // Emit to specific user's room
-        this.io.to(`user-${item.userId}`).emit('weight_update', updateData);
-        
-        // Also emit globally for backwards compatibility
-        this.io.emit('weight_update', updateData);
-        
-        logger.info(`Emitted weight update for item ${item.name} to user ${item.userId}:`, updateData);
+      await this.saveReading(item, { weight, threshold, status, wifi_rssi });
+      this.emitWeightUpdate(item, { weight, status });
+      
+      if (this.shouldTriggerAlert(item)) {
+        await this.createLowWeightAlert(item);
       }
-
-      // Check for alerts - use item.status which was calculated above
-      if (item.status === 'LOW' && item.notificationsEnabled) {
-        // Use custom alert message if available, otherwise use default
-        const alertMessage = item.customAlertMessage 
-          ? item.customAlertMessage 
-          : `${item.name} is running low (${weight}g)`;
-          
-        await alertService.createAlert({
-          userId: item.userId,
-          itemId: item._id,
-          type: 'low_weight',
-          severity: 'warning',
-          message: alertMessage,
-          data: { weight, threshold: item.thresholdWeight }
-        });
-      }
-
     } catch (error) {
       logger.error('Error handling weight data:', error);
     }
+  }
+
+  updateItemFromWeight(item, { weight, threshold, status, wear_status }) {
+    item.currentWeight = weight;
+    item.lastReading = new Date();
+    
+    if (threshold !== undefined) {
+      item.thresholdWeight = threshold;
+    }
+
+    if (wear_status !== undefined) {
+      this.updateWearableMode(item, wear_status, weight);
+    } else {
+      this.updateWeightMode(item, status, weight);
+    }
+  }
+
+  updateWearableMode(item, wear_status, weight) {
+    item.detectionMode = 'wearable';
+    item.wearableMode = true;
+    item.wearStatus = wear_status;
+    item.isWorn = wear_status === 'ON';
+    
+    // Auto-detect OFF status for low weight
+    if (weight < STATUS_THRESHOLDS.LOW_WEIGHT_THRESHOLD) {
+      item.wearStatus = 'OFF';
+      item.isWorn = false;
+      item.status = 'OFF';
+    } else {
+      item.status = wear_status;
+    }
+  }
+
+  updateWeightMode(item, status, weight) {
+    item.detectionMode = 'weight';
+    item.wearableMode = false;
+    item.wearStatus = 'N/A';
+    
+    if (status) {
+      item.status = status;
+    } else {
+      item.status = this.calculateWeightStatus(weight, item.thresholdWeight);
+    }
+  }
+
+  calculateWeightStatus(weight, threshold) {
+    if (weight <= STATUS_THRESHOLDS.EMPTY) return 'EMPTY';
+    if (weight < threshold) return 'LOW';
+    return 'OK';
+  }
+
+  async saveReading(item, { weight, threshold, status, wifi_rssi }) {
+    const reading = new Reading({
+      itemId: item._id,
+      deviceId: item.deviceId,
+      weight,
+      threshold: threshold !== undefined ? threshold : item.thresholdWeight,
+      status: status || item.status,
+      wifiRssi: wifi_rssi
+    });
+    await reading.save();
+  }
+
+  emitWeightUpdate(item, { weight, status }) {
+    if (!this.io) return;
+
+    const updateData = {
+      itemId: item._id,
+      deviceId: item.deviceId,
+      weight,
+      status: item.status,
+      wearStatus: item.wearStatus,
+      isWorn: item.isWorn,
+      timestamp: new Date()
+    };
+    
+    this.io.to(`user-${item.userId}`).emit('weight_update', updateData);
+    this.io.emit('weight_update', updateData);
+  }
+
+  shouldTriggerAlert(item) {
+    return item.status === 'LOW' && item.notificationsEnabled;
+  }
+
+  async createLowWeightAlert(item) {
+    const message = item.customAlertMessage || `${item.name} is running low (${item.currentWeight}g)`;
+    
+    await alertService.createAlert({
+      userId: item.userId,
+      itemId: item._id,
+      type: 'low_weight',
+      severity: 'warning',
+      message,
+      data: { weight: item.currentWeight, threshold: item.thresholdWeight }
+    });
   }
 
   async handleStatusData(data) {
     const { device_id, status } = data;
 
     try {
-      const item = await Item.findOne({ deviceId: device_id });
+      const item = await Item.findOne({ deviceId: device_id, active: true });
       
-      if (item) {
-        if (status === 'offline') {
-          item.status = 'OFFLINE';
-          await item.save();
+      if (!item) return;
 
-          if (item.notificationsEnabled) {
-            await alertService.createAlert({
-              userId: item.userId,
-              itemId: item._id,
-              type: 'offline',
-              severity: 'critical',
-              message: `${item.name} is offline`,
-              data: { device_id }
-            });
-          }
-        }
+      if (status === 'offline') {
+        item.status = 'OFFLINE';
+        await item.save();
 
-        // Emit real-time update to the specific user who owns this item
-        if (this.io) {
-          const statusData = {
+        if (item.notificationsEnabled) {
+          await alertService.createAlert({
+            userId: item.userId,
             itemId: item._id,
-            deviceId: device_id,
-            status,
-            timestamp: new Date()
-          };
-          
-          // Emit to specific user's room
-          this.io.to(`user-${item.userId}`).emit('status_update', statusData);
-          
-          // Also emit globally for backwards compatibility
-          this.io.emit('status_update', statusData);
-          
-          logger.info(`Emitted status update for item ${item.name} to user ${item.userId}:`, statusData);
+            type: 'offline',
+            severity: 'critical',
+            message: `${item.name} is offline`,
+            data: { device_id }
+          });
         }
+      }
+
+      if (this.io) {
+        const statusData = {
+          itemId: item._id,
+          deviceId: device_id,
+          status,
+          timestamp: new Date()
+        };
+        
+        this.io.to(`user-${item.userId}`).emit('status_update', statusData);
+        this.io.emit('status_update', statusData);
       }
     } catch (error) {
       logger.error('Error handling status data:', error);

@@ -29,7 +29,13 @@ export const SocketProvider = ({ children }) => {
 
       const newSocket = io(SOCKET_URL, {
         transports: ['websocket', 'polling'],
-        secure: SOCKET_URL.startsWith('https:')
+        secure: SOCKET_URL.startsWith('https:'),
+        timeout: 10000, // 10 second timeout for unstable networks
+        forceNew: true,
+        reconnection: true,
+        reconnectionDelay: 2000,
+        reconnectionAttempts: 10,
+        reconnectionDelayMax: 5000
       });
 
       newSocket.on('connect', () => {
@@ -40,9 +46,21 @@ export const SocketProvider = ({ children }) => {
         newSocket.emit('authenticate', { userId: user._id });
       });
 
-      newSocket.on('disconnect', () => {
-        console.log('Socket disconnected');
+      newSocket.on('disconnect', (reason) => {
+        console.log('Socket disconnected:', reason);
         setConnected(false);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        setConnected(false);
+      });
+
+      newSocket.on('reconnect', (attemptNumber) => {
+        console.log('Socket reconnected after', attemptNumber, 'attempts');
+        setConnected(true);
+        // Re-authenticate after reconnection
+        newSocket.emit('authenticate', { userId: user._id });
       });
 
       newSocket.on('error', (error) => {

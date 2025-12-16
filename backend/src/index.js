@@ -60,11 +60,6 @@ app.use('/api/geofence', require('./routes/geofence'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/location', require('./routes/mobile-location'));
 
-// Debug routes only in development
-if (!config.isProduction) {
-  app.use('/api/debug', require('./routes/debug'));
-}
-
 // Health check
 app.get('/health', (req, res) => {
   res.json({ 

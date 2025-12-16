@@ -56,16 +56,23 @@ class GeofenceService {
 
   async updateUserLocation(userId, userLocation) {
     try {
+      logger.info(`Processing location update for user ${userId}: lat=${userLocation.latitude}, lng=${userLocation.longitude}, accuracy=${userLocation.accuracy}`);
+      
       // Use lean() for faster queries when we don't need full Mongoose documents initially
       const geofences = await Geofence.find({ userId, active: true });
       const now = new Date();
       const alertsTriggered = [];
       const geofenceStatusChanges = [];
 
+      logger.info(`Found ${geofences.length} active geofences for user ${userId}`);
+
       // Update geofence tracking
       for (const geofence of geofences) {
         const isInside = this.isPointInGeofence(userLocation, geofence);
         const wasInside = geofence.userCurrentlyInside;
+        const distance = geolib.getDistance(userLocation, geofence.location);
+        
+        logger.info(`Geofence ${geofence.name}: isInside=${isInside}, wasInside=${wasInside}, distance=${distance}m, radius=${geofence.radius}m`);
         
         // Skip if state hasn't changed
         if (isInside === wasInside) {

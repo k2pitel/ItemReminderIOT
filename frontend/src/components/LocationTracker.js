@@ -15,11 +15,11 @@ import { useAuth } from '../context/AuthContext';
 
 // Configuration constants
 const LOCATION_CONFIG = {
-  MAX_JUMP_DISTANCE: 1000,
-  MIN_ACCURACY: 100,
-  UPDATE_COOLDOWN: 4000,
-  BUFFER_SIZE: 3,
-  GPS_TIMEOUT: 15000
+  MAX_JUMP_DISTANCE: 5000, // Increased for better mobility
+  MIN_ACCURACY: 1000, // More lenient accuracy for unstable GPS
+  UPDATE_COOLDOWN: 3000, // Slightly longer for network stability
+  BUFFER_SIZE: 1, // No buffering to reduce lag on unstable network
+  GPS_TIMEOUT: 5000 // Shorter timeout for unstable network
 };
 
 const LocationTracker = () => {
@@ -39,15 +39,21 @@ const LocationTracker = () => {
 
   // Socket authentication and event handlers
   useEffect(() => {
-    if (!socket || !user) return;
+    if (!socket || !user) {
+      console.log('Socket or user not available:', { socket: !!socket, user: !!user });
+      return;
+    }
 
+    console.log('Authenticating socket for user:', user.id);
     socket.emit('authenticate', { userId: user.id });
 
     const handleGeofenceUpdate = (data) => {
+      console.log('Received geofence update:', data);
       setGeofenceStatus(data.geofenceStatus || []);
     };
 
     const handleGeofenceAlert = (alert) => {
+      console.log('Received geofence alert:', alert);
       if (Notification.permission === 'granted') {
         new Notification(alert.message, {
           icon: '/favicon.ico',
@@ -106,23 +112,37 @@ const LocationTracker = () => {
   };
 
   const sendLocationUpdate = useCallback((lat, lon, acc) => {
-    if (!socket) return;
+    if (!socket || !socket.connected) {
+      console.warn('Socket not connected, queuing location update');
+      return;
+    }
     
     const now = Date.now();
     if (now - lastUpdateRef.current < LOCATION_CONFIG.UPDATE_COOLDOWN) {
+      console.log('Location update rate limited, skipping');
       return;
     }
 
-    socket.emit('location-update', { latitude: lat, longitude: lon, accuracy: acc });
-    lastUpdateRef.current = now;
-    setLastUpdate(new Date());
+    try {
+      console.log('Sending location update:', { latitude: lat, longitude: lon, accuracy: acc });
+      socket.emit('location-update', { latitude: lat, longitude: lon, accuracy: acc });
+      lastUpdateRef.current = now;
+      setLastUpdate(new Date());
+    } catch (error) {
+      console.error('Failed to send location update:', error);
+      setError('Network error sending location');
+    }
   }, [socket]);
 
   const handleLocationUpdate = useCallback((position) => {
     const { latitude: lat, longitude: lon, accuracy: acc } = position.coords;
 
+    console.log('Received GPS position:', { lat, lon, acc });
+
     if (!isValidLocation(lat, lon, acc)) {
-      setError(`Invalid location (accuracy: ${(acc/1000).toFixed(1)}km)`);
+      const errorMsg = `Invalid location (accuracy: ${(acc/1000).toFixed(1)}km)`;
+      console.warn(errorMsg);
+      setError(errorMsg);
       return;
     }
 
@@ -130,12 +150,15 @@ const LocationTracker = () => {
     if (currentLocation) {
       const distance = calculateDistance(currentLocation.lat, currentLocation.lon, lat, lon);
       if (distance > LOCATION_CONFIG.MAX_JUMP_DISTANCE) {
-        setError(`Location jump too large: ${(distance/1000).toFixed(1)}km`);
+        const errorMsg = `Location jump too large: ${(distance/1000).toFixed(1)}km`;
+        console.warn(errorMsg);
+        setError(errorMsg);
         return;
       }
     }
 
     const smoothed = smoothLocation(lat, lon, acc);
+    console.log('Smoothed location:', smoothed);
     
     setCurrentLocation(smoothed);
     setAccuracy(smoothed.acc);
@@ -151,17 +174,26 @@ const LocationTracker = () => {
         message = "Location access denied. Please enable location permissions.";
         break;
       case error.POSITION_UNAVAILABLE:
-        message = "Location information unavailable.";
+        message = "Location unavailable. Check GPS/network connection.";
         break;
       case error.TIMEOUT:
-        message = "Location request timed out.";
+        message = "Location timeout. Poor network/GPS signal.";
         break;
       default:
-        message = "Unknown location error occurred.";
+        message = "Location error. Check network connection.";
         break;
     }
+    console.error('Location error:', error, message);
     setError(message);
-  }, []);
+    
+    // Auto-retry on timeout for unstable networks
+    if (error.code === error.TIMEOUT && isTracking) {
+      setTimeout(() => {
+        console.log('Retrying location after timeout...');
+        setError(null);
+      }, 3000);
+    }
+  }, [isTracking]);
 
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
@@ -169,16 +201,20 @@ const LocationTracker = () => {
       return;
     }
 
+    console.log('Starting location tracking...');
+
     // Request notification permission
     if (Notification.permission === 'default') {
       Notification.requestPermission();
     }
 
     const options = {
-      enableHighAccuracy: true,
+      enableHighAccuracy: false, // Use less accurate but more stable positioning
       timeout: LOCATION_CONFIG.GPS_TIMEOUT,
-      maximumAge: 30000
+      maximumAge: 30000 // Longer cache to handle network drops
     };
+
+    console.log('Starting geolocation watch with options:', options);
 
     watchIdRef.current = navigator.geolocation.watchPosition(
       handleLocationUpdate,
@@ -187,6 +223,7 @@ const LocationTracker = () => {
     );
 
     setIsTracking(true);
+    console.log('Location tracking started, watch ID:', watchIdRef.current);
   }, [handleLocationUpdate, handleLocationError]);
 
   const stopTracking = useCallback(() => {

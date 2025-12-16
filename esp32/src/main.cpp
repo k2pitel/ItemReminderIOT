@@ -4,150 +4,184 @@
 #include <HX711.h>
 #include <Preferences.h>
 
-// ==================== DEVICE CONFIGURATION ====================
-struct DeviceConfig {
-  const char* deviceId = "ESP32_001";
-  const char* itemName = "Pills";
-  const float thresholdWeight = 1000.0;
-  const unsigned long publishInterval = 2000;
-  const int maxRetries = 5;
-};
+const char* DEVICE_ID = "ESP32_001";
+const char* ITEM_NAME = "Pills";
+const char* WIFI_SSID = "AndroidAP470C";
+const char* WIFI_PASS = "Andre1234";
+const char* MQTT_BROKER = "192.168.229.112";
+const int MQTT_PORT = 1883;
 
-struct WiFiConfig {
-  const char* ssid = "AndroidAP470C";
-  const char* password = "Andre1234";
-  const int connectionTimeout = 30;
-};
+const int DT_PIN = 2;
+const int SCK_PIN = 3;
+const float DEFAULT_CALIBRATION = 1310.73;
+const float MIN_WEIGHT = -10.0;
+const float MAX_WEIGHT = 10000.0;
+const unsigned long PUBLISH_INTERVAL = 2000;
 
-struct MqttConfig {
-  const char* broker = "192.168.229.112";
-  const int port = 1883;
-  const char* user = "";
-  const char* password = "";
-  const int keepAlive = 60;
-};
-
-struct SensorConfig {
-  const int dtPin = 2;    // GPIO 2
-  const int sckPin = 3;   // GPIO 3
-  const float calibrationFactor = 1310.73;
-  const int numReadings = 3;
-  const float minValidWeight = -10.0;
-  const float maxValidWeight = 10000.0;
-};
-
-// Global configuration instances
-DeviceConfig deviceConfig;
-WiFiConfig wifiConfig;
-MqttConfig mqttConfig;
-SensorConfig sensorConfig;
-
-// ==================== GLOBAL STATE ====================
-WiFiClient espClient;
-PubSubClient client(espClient);
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
 HX711 scale;
-Preferences prefs;
+Preferences preferences;
 
-// Runtime state
-struct DeviceState {
-  float currentWeight = 0.0;
-  float calibrationFactor = 0.0;
-  unsigned long lastPublish = 0;
-  int connectionRetries = 0;
-  bool isConnected = false;
-} state;
+float currentWeight = 0.0;
+float calibrationFactor = DEFAULT_CALIBRATION;
+unsigned long lastPublish = 0;
+char weightTopic[64];
+char statusTopic[64];
+char commandTopic[64];
 
-// MQTT topics (built dynamically)
-char weightTopic[128];
-char statusTopic[128];
-char commandTopic[128];
-
-// ==================== UTILITY FUNCTIONS ====================
-void buildMqttTopics() {
-  snprintf(weightTopic, sizeof(weightTopic), "itemreminder/devices/%s/weight", deviceConfig.deviceId);
-  snprintf(statusTopic, sizeof(statusTopic), "itemreminder/devices/%s/status", deviceConfig.deviceId);
-  snprintf(commandTopic, sizeof(commandTopic), "itemreminder/devices/%s/command", deviceConfig.deviceId);
+void setupTopics() {
+  sprintf(weightTopic, "itemreminder/devices/%s/weight", DEVICE_ID);
+  sprintf(statusTopic, "itemreminder/devices/%s/status", DEVICE_ID);
+  sprintf(commandTopic, "itemreminder/devices/%s/command", DEVICE_ID);
 }
 
-void logDeviceInfo() {
-  Serial.println("===================================");
-  Serial.println("ESP32 Item Reminder - Starting...");
-  Serial.println("===================================");
-  Serial.printf("Device ID: %s\n", deviceConfig.deviceId);
-  Serial.printf("Item Name: %s\n", deviceConfig.itemName);
-  Serial.printf("MQTT Broker: %s:%d\n", mqttConfig.broker, mqttConfig.port);
-  Serial.printf("WiFi SSID: %s\n", wifiConfig.ssid);
-  Serial.println("===================================");
-}
-
-void setup_wifi() {
-  delay(10);
-  Serial.println();
-  Serial.println("=================================");
-  Serial.println("ESP32 Item Reminder - Booting...");
-  Serial.println("=================================");
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(ssid);
-
+void connectWiFi() {
+  Serial.printf("Connecting to WiFi: %s\n", WIFI_SSID);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 30) {
     delay(500);
     Serial.print(".");
     attempts++;
   }
-
+  
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println();
-    Serial.println("[OK] WiFi connected");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("Signal strength (RSSI): ");
-    Serial.print(WiFi.RSSI());
-    Serial.println(" dBm");
+    Serial.printf("\nWiFi connected. IP: %s\n", WiFi.localIP().toString().c_str());
   } else {
-    Serial.println();
-    Serial.println("[ERR] WiFi connection failed!");
-    Serial.println("Please check your SSID and password");
+    Serial.println("\nWiFi connection failed!");
   }
 }
 
-void subscribeToCommandTopics() {
-  // Device-scoped command topic
-  if (client.subscribe(command_topic)) {
-    Serial.print("[OK] Subscribed to: ");
-    Serial.println(command_topic);
-  } else {
-    Serial.print("[ERR] Failed to subscribe to: ");
-    Serial.println(command_topic);
-  }
-
-  // Optional broadcast commands for all devices (legacy support)
-  if (client.subscribe(broadcast_command_topic)) {
-    Serial.print("[OK] Subscribed to broadcast commands: ");
-    Serial.println(broadcast_command_topic);
-  } else {
-    Serial.print("[ERR] Failed to subscribe to broadcast: ");
-    Serial.println(broadcast_command_topic);
-  }
-}
-
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("[MQTT] Message received [");
-  Serial.print(topic);
-  Serial.print("]: ");
-
+void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   String message;
   for (unsigned int i = 0; i < length; i++) {
     message += (char)payload[i];
   }
-  Serial.println(message);
-
-  // Parse command JSON
+  
+  Serial.printf("MQTT message [%s]: %s\n", topic, message.c_str());
+  
   JsonDocument doc;
-  DeserializationError error = deserializeJson(doc, message);
+  if (deserializeJson(doc, message) == DeserializationError::Ok) {
+    if (doc["threshold"].is<float>()) {
+      float threshold = doc["threshold"];
+      Serial.printf("Threshold updated: %.2f\n", threshold);
+    }
+    
+    if (doc["tare"].is<bool>() && doc["tare"]) {
+      Serial.println("Taring scale...");
+      scale.tare();
+    }
+    
+    if (doc["calibrate"].is<float>()) {
+      calibrationFactor = doc["calibrate"];
+      scale.set_scale(calibrationFactor);
+      preferences.putFloat("calibration", calibrationFactor);
+      Serial.printf("Calibration updated: %.2f\n", calibrationFactor);
+    }
+  }
+}
+
+void connectMqtt() {
+  while (!mqttClient.connected()) {
+    Serial.print("Connecting to MQTT...");
+    
+    if (mqttClient.connect(DEVICE_ID)) {
+      Serial.println(" connected");
+      mqttClient.subscribe(commandTopic);
+      Serial.printf("Subscribed to: %s\n", commandTopic);
+    } else {
+      Serial.printf(" failed, rc=%d. Retrying in 5s\n", mqttClient.state());
+      delay(5000);
+    }
+  }
+}
+
+float readWeight() {
+  if (!scale.is_ready()) return currentWeight;
+  
+  float weight = scale.get_units(3);
+  
+  if (weight >= MIN_WEIGHT && weight <= MAX_WEIGHT) {
+    return weight;
+  }
+  
+  return currentWeight;
+}
+
+void publishWeight(float weight) {
+  JsonDocument doc;
+  doc["device_id"] = DEVICE_ID;
+  doc["item_name"] = ITEM_NAME;
+  doc["weight"] = weight;
+  doc["wifi_rssi"] = WiFi.RSSI();
+  doc["timestamp"] = millis();
+  
+  String message;
+  serializeJson(doc, message);
+  
+  if (mqttClient.publish(weightTopic, message.c_str())) {
+    Serial.printf("Published weight: %.2fg\n", weight);
+  } else {
+    Serial.println("Failed to publish weight");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  Serial.println("ESP32 Item Reminder starting...");
+  Serial.printf("Device ID: %s\n", DEVICE_ID);
+  
+  setupTopics();
+  
+  preferences.begin("itemreminder", false);
+  calibrationFactor = preferences.getFloat("calibration", DEFAULT_CALIBRATION);
+  
+  scale.begin(DT_PIN, SCK_PIN);
+  if (scale.is_ready()) {
+    scale.set_scale(calibrationFactor);
+    scale.tare();
+    Serial.printf("Scale ready. Calibration: %.2f\n", calibrationFactor);
+  } else {
+    Serial.println("Scale initialization failed!");
+  }
+  
+  connectWiFi();
+  
+  mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+  mqttClient.setCallback(onMqttMessage);
+  
+  Serial.println("Setup complete!");
+}
+
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    connectWiFi();
+  }
+  
+  if (!mqttClient.connected()) {
+    connectMqtt();
+  }
+  
+  mqttClient.loop();
+  
+  unsigned long now = millis();
+  if (now - lastPublish > PUBLISH_INTERVAL) {
+    lastPublish = now;
+    
+    float newWeight = readWeight();
+    if (newWeight != currentWeight || abs(now - lastPublish) > 10000) {
+      currentWeight = newWeight;
+      publishWeight(currentWeight);
+    }
+  }
+  
+  delay(10);
+}
 
   if (!error) {
     // Update threshold if received
